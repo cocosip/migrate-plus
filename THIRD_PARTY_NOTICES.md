@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 migrate-plus is licensed under its own [MIT license](LICENSE), copyright
-2026 cocosip. The notices below describe the derived CLI files and the DM client dependency.
+2026 cocosip. The notices below describe the derived CLI files and native client dependencies.
 
 ## golang-migrate CLI
 
@@ -58,3 +58,34 @@ Database Co., Ltd. copyright notices. The archive contains no LICENSE file.
 This project does not attribute MIT terms to that dependency; consult its
 maintainer/vendor for the applicable redistribution terms. Native client source
 is used as a Go module dependency rather than copied into this repository.
+
+## Huawei GaussDB Go client dependency
+
+`database/gaussdb` imports
+[`github.com/HuaweiCloudDeveloper/gaussdb-go v1.0.0-rc1`](https://github.com/huaweicloud-samples/database-gaussdb-go/tree/v1.0.0-rc1),
+revision `1eccdbac5e7790f8c13668fd2506c8b712c12993`. The repository and declared
+module names differ. Client source is used as a Go module dependency rather
+than copied into this repository. Its module archive includes this license:
+
+Copyright (c) 2013-2021 Jack Christensen
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

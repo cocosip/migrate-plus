@@ -1,9 +1,10 @@
-// Command migrate-plus runs migrations with the Oracle and DM drivers.
+// Command migrate-plus runs migrations with the Oracle, DM and GaussDB drivers.
 package main
 
 import (
 	"github.com/cocosip/migrate-plus/cli"
 	_ "github.com/cocosip/migrate-plus/database/dm"
+	_ "github.com/cocosip/migrate-plus/database/gaussdb"
 	_ "github.com/cocosip/migrate-plus/database/oracle"
 )
 

@@ -28,8 +28,14 @@ Oracle, MySQL and PostgreSQL compatibility modes through DM-native operations.
 No DM server build has been verified yet. See the [DM driver guide](database/dm/README.md)
 for prerequisites, mode distinctions, SQL restrictions and opt-in tests.
 
+GaussDB is implemented with Huawei's native pure-Go client
+`github.com/HuaweiCloudDeveloper/gaussdb-go v1.0.0-rc1`. The client targets
+GaussDB 2.x+; this driver initially accepts A/PG modes without distributed
+coordinators. No Huawei server build has been verified yet. See the
+[GaussDB driver guide](database/gaussdb/README.md) for SQL restrictions and tests.
+
 Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
-The distributed CLI includes Oracle, DM and the upstream file source.
+The distributed CLI includes Oracle, DM, GaussDB and the upstream file source.
 
 ```sh
 go run ./cmd/migrate-plus -help
@@ -85,7 +91,8 @@ go.mod                 Direct dependency on golang-migrate/v4
 cli/                   Upstream-derived command layer calling upstream migrate
 database/oracle/       Native Oracle driver, unit tests, and opt-in integration tests
 database/dm/           Native DM8 driver, unit tests, and opt-in integration tests
-cmd/migrate-plus/      Thin executable entrypoint importing Oracle and DM
+database/gaussdb/      Native GaussDB driver, unit and opt-in integration tests
+cmd/migrate-plus/      Thin executable entrypoint importing all three drivers
 docs/                  Architecture and design
 .github/workflows/     CI, CodeQL, and tag-based CLI releases
 LICENSE                Project MIT license
@@ -119,7 +126,7 @@ CLI binaries for amd64/arm64. Build artifacts and Linux coverage are retained fo
 Normal tests and builds disable cgo; the separate Linux race test enables cgo
 for Go's race detector. CodeQL analyzes Go on main-branch pushes, pull requests,
 and a weekly schedule. Dependabot checks Go modules and Actions weekly.
-Default tests require no database. Oracle and DM integration tests require an explicitly
+Default tests require no database. Oracle, DM and GaussDB integration tests require an explicitly
 configured disposable schema and destroy its supported objects; see the
 [driver guide](database/oracle/README.md#integration-tests).
 
@@ -129,10 +136,11 @@ contain the CLI, this project's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `README
 the binary's `-version` reports the tag. Tags containing `-` create prereleases.
 
 Design documentation: [project architecture](docs/DESIGN.md),
-[Oracle driver](docs/ORACLE_DESIGN.md), and [DM driver](docs/DM_DESIGN.md).
+[Oracle driver](docs/ORACLE_DESIGN.md), [DM driver](docs/DM_DESIGN.md), and
+[GaussDB driver](docs/GAUSSDB_DESIGN.md).
 Connection examples and operational instructions are in each driver package's README.
 
 ## License
 
-[MIT](LICENSE), copyright 2026 cocosip. Attribution and license terms for the
-derived CLI files are in [third-party notices](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE), copyright 2026 cocosip. Provenance and terms for derived CLI
+files and native client dependencies are in [third-party notices](THIRD_PARTY_NOTICES.md).

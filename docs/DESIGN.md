@@ -16,7 +16,7 @@ contributes driver packages implementing upstream interfaces. Upstream owns
 migration scheduling, direction, version transitions, dirty-state recovery,
 source parsing, prefetching, and graceful stopping.
 
-Oracle and DM8 drivers are implemented and included in the distributed CLI.
+Oracle, DM8 and GaussDB drivers are implemented and included in the distributed CLI.
 Their detailed designs, compatibility targets and verification boundaries are
 listed in [Driver designs](#10-driver-designs).
 
@@ -79,20 +79,22 @@ migrate-plus/
 ├── go.sum
 ├── database/                      # Additional database drivers
 │   ├── oracle/                    # Oracle database.Driver using go-ora v2
-│   └── dm/                        # DM8 database.Driver using the native DM client
+│   ├── dm/                        # DM8 database.Driver using the native DM client
+│   └── gaussdb/                   # GaussDB database.Driver using Huawei's native client
 ├── cli/
 │   ├── main.go                    # Public Main(version string)
 │   ├── commands.go                # Calls upstream migrate operations
 │   ├── log.go                     # Upstream CLI logger
 │   └── main_test.go               # Process-based CLI acceptance tests
 ├── cmd/migrate-plus/
-│   └── main.go                    # Imports Oracle/DM and calls cli.Main
+│   └── main.go                    # Imports Oracle/DM/GaussDB and calls cli.Main
 ├── LICENSE                        # Project MIT license
 ├── THIRD_PARTY_NOTICES.md          # Derived CLI provenance and license
 ├── docs/
 │   ├── DESIGN.md                  # Project architecture and shared contracts
 │   ├── ORACLE_DESIGN.md           # Oracle-specific driver design
-│   └── DM_DESIGN.md               # DM-specific driver design
+│   ├── DM_DESIGN.md               # DM-specific driver design
+│   └── GAUSSDB_DESIGN.md          # GaussDB-specific driver design
 └── .github/workflows/ci.yml
 ```
 
@@ -221,7 +223,7 @@ blank-import any compatible upstream or external database driver and call the
 same entrypoint. A prebuilt upstream executable cannot load Go packages as
 runtime plugins; new drivers must be compiled into a binary.
 
-The distributed CLI registers native `source/file`, Oracle and DM drivers. The retained commands
+The distributed CLI registers native `source/file`, Oracle, DM and GaussDB drivers. The retained commands
 are `create`, `goto`, `up`, `down`, `drop`, `force`, and database `version`.
 `-version` prints the build version. `-path` expands to a file source URL.
 Create flags remain upstream `-ext`, `-dir`, `-seq`, `-digits`, `-format`, `-tz`.
@@ -235,7 +237,7 @@ For a selected database already supported upstream, import its upstream driver.
 For an additional database such as Oracle or DM, implement `database.Driver` in
 `database/<name>` and import it from `cmd/migrate-plus`. Adding a database must
 not require a separate command dispatcher or database-specific branches in
-`cli`. The CLI help lists compiled drivers: Oracle and DM are included in the
+`cli`. The CLI help lists compiled drivers: Oracle, DM and GaussDB are included in the
 distributed CLI; real-server verification
 remains a separate acceptance item.
 
@@ -252,7 +254,7 @@ branch pushes, pull requests, and weekly. Dependabot checks modules and Actions
 weekly. Pushing a `v*` tag reuses CI before publishing six CLI archives with
 embedded tag versions, project license, CLI notices, README, and SHA-256 checksums.
 Tags containing `-` are prereleases. No database
-services are provisioned by the default workflow. Oracle and DM integration tests are
+services are provisioned by the default workflow. Oracle, DM and GaussDB integration tests are
 explicitly enabled against a disposable schema and reuse upstream's conformance
 suite. SQL-boundary unit tests run without a database.
 
@@ -264,6 +266,7 @@ Use the same documentation structure for every implemented database driver:
 |---|---|---|
 | Oracle | [ORACLE_DESIGN.md](ORACLE_DESIGN.md) | [database/oracle/README.md](../database/oracle/README.md) |
 | DM | [DM_DESIGN.md](DM_DESIGN.md) | [database/dm/README.md](../database/dm/README.md) |
+| GaussDB | [GAUSSDB_DESIGN.md](GAUSSDB_DESIGN.md) | [database/gaussdb/README.md](../database/gaussdb/README.md) |
 
 This document owns upstream integration, package boundaries, common migration
 contracts, CLI composition and CI. Each driver design owns dependency decisions,
@@ -273,7 +276,7 @@ owns connection examples, account setup, script examples and test commands.
 
 When adding a driver, add its design and usage guide together and link them
 here. Keep database-specific details out of the project architecture. Update
-compatibility claims only with the corresponding test evidence; neither driver
+compatibility claims only with the corresponding test evidence; no driver
 currently has real-server certification.
 
 ## 11. Maintenance and Remaining Decisions
