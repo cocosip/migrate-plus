@@ -201,6 +201,11 @@ hierarchy is needed. Applications can provide their own logger implementation.
 
 ## 8. CLI Composition
 
+Both library drivers and the CLI are supported deliverables. Library consumers
+do not need the CLI; command-line users receive a binary with the selected
+drivers already registered. Reuse upstream migration APIs, source drivers,
+database drivers, command behavior, and flags wherever available.
+
 The upstream CLI's implementation lives in `internal/cli` and cannot be imported
 from this module. Port only its command layer into public `cli` with source
 provenance and its MIT notice. It imports the upstream migrate module for every
@@ -222,13 +227,26 @@ The supported database set and default CLI imports will be selected as actual
 drivers become available. Do not add build-tag files for missing packages or
 claim that optional tags alone remove unconditional imports.
 
+For a selected database already supported upstream, import its upstream driver.
+For an additional database such as Oracle or DM, implement `database.Driver` in
+`database/<name>` and import it from `cmd/migrate-plus`. Adding a database must
+not require a separate command dispatcher or database-specific branches in
+`cli`. The CLI help lists only compiled drivers: Oracle is available now; DM
+joins the distributed CLI when its driver is implemented and verified.
+
 ## 9. Testing and CI
 
 M1 tests CLI help/build-version/create behavior and command failure without a
 database. There are no tests that only revalidate the upstream migration engine.
 
-GitHub Actions runs Go 1.27 tests on Linux/Windows, builds for Linux/macOS/Windows
-on amd64/arm64, and runs golangci-lint v2.14.0. All builds disable cgo. No database
+GitHub Actions runs Go 1.27 tests on Linux/Windows/macOS, verifies module integrity
+and tidiness, collects coverage, builds CLI artifacts for Linux/macOS/Windows on
+amd64/arm64, and runs golangci-lint v2.14.0. All builds and normal tests disable
+cgo; a separate Linux race-detector run enables cgo. CodeQL scans Go on primary
+branch pushes, pull requests, and weekly. Dependabot checks modules and Actions
+weekly. Pushing a `v*` tag reuses CI before publishing six CLI archives with
+embedded tag versions, project license, CLI notices, README, and SHA-256 checksums.
+Tags containing `-` are prereleases. No database
 services are provisioned by the default workflow. Oracle integration tests are
 explicitly enabled against a disposable schema and reuse upstream's conformance
 suite. SQL-boundary unit tests run without a database.

@@ -9,6 +9,12 @@ driver implements the upstream `database.Driver` and registers with the upstream
 registry. The migration engine, sources, file parsing, errors, and public library
 API come from golang-migrate; they are not implemented again here.
 
+The project provides both library drivers and a CLI. Applications import driver
+packages and keep using the upstream migrate API without depending on the CLI.
+Command-line users install `migrate-plus`, which retains upstream commands and
+flags and compiles in the selected database drivers. Existing upstream drivers
+are reused by import when selected; additional drivers belong to this project.
+
 ## Current status
 
 Oracle is implemented with `github.com/sijms/go-ora/v2 v2.9.0`. Its target range
@@ -75,7 +81,7 @@ cli/                   Upstream-derived command layer calling upstream migrate
 database/oracle/       Native Oracle driver, unit tests, and opt-in integration tests
 cmd/migrate-plus/      Thin executable entrypoint importing Oracle
 docs/                  Architecture and design
-.github/workflows/     Go 1.27 build, test, and lint jobs
+.github/workflows/     CI, CodeQL, and tag-based CLI releases
 LICENSE                Project MIT license
 THIRD_PARTY_NOTICES.md  Derived CLI attribution and license notice
 ```
@@ -100,11 +106,21 @@ go build -trimpath -ldflags '-X main.Version=dev' -o bin/migrate-plus.exe ./cmd/
 .\bin\migrate-plus.exe -version
 ```
 
-GitHub Actions tests on Linux and Windows, cross-builds Linux/macOS/Windows for
-amd64/arm64, and uses golangci-lint v2.14.0, matching the local installation.
+GitHub Actions uses Go 1.27.x to test on Linux, Windows, and macOS, verify modules,
+check `go mod tidy -diff`, collect coverage, and cross-build Linux/macOS/Windows
+CLI binaries for amd64/arm64. Build artifacts and Linux coverage are retained for
+14 days. Lint uses golangci-lint v2.14.0, matching the local installation.
+Normal tests and builds disable cgo; the separate Linux race test enables cgo
+for Go's race detector. CodeQL analyzes Go on main-branch pushes, pull requests,
+and a weekly schedule. Dependabot checks Go modules and Actions weekly.
 Default tests require no database. Oracle integration tests require an explicitly
 configured disposable schema and destroy its supported objects; see the
 [driver guide](database/oracle/README.md#integration-tests).
+
+Pushing a `v*` tag runs the same CI checks before publishing a GitHub Release.
+Each release includes six `.tar.gz` CLI packages and SHA-256 checksums. Packages
+contain the CLI, this project's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `README.md`;
+the binary's `-version` reports the tag. Tags containing `-` create prereleases.
 
 See [architecture and driver development](docs/DESIGN.md).
 

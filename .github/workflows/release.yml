@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  checks:
+    name: Release checks
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Publish CLI archives
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+          cache: true
+      - name: Build release archives
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            export GOOS=${target%/*} GOARCH=${target#*/}
+            archive="migrate-plus_${RELEASE_VERSION}_${GOOS}_${GOARCH}"
+            package="dist/${archive}"
+            binary=migrate-plus
+            if [[ "$GOOS" == windows ]]; then binary+=.exe; fi
+            mkdir -p "$package"
+            go build -trimpath -ldflags "-s -w -X main.Version=${RELEASE_VERSION}" -o "${package}/${binary}" ./cmd/migrate-plus
+            cp LICENSE THIRD_PARTY_NOTICES.md README.md "$package/"
+            tar -czf "dist/${archive}.tar.gz" -C "$package" .
+          done
+          (cd dist && sha256sum *.tar.gz > checksums.txt)
+      - name: Verify CLI version
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: test "$("dist/migrate-plus_${RELEASE_VERSION}_linux_amd64/migrate-plus" -version 2>&1)" = "$RELEASE_VERSION"
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
