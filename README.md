@@ -21,10 +21,15 @@ Oracle is implemented with `github.com/sijms/go-ora/v2 v2.9.0`. Its target range
 follows go-ora's documented Oracle 10.2+ baseline. The driver reads the server
 version and `COMPATIBLE` at connection time to select supported capabilities.
 Real-server verification is separate from that compatibility target; no server
-version has been verified by this repository yet. DM remains planned.
+version has been verified by this repository yet.
+
+DM8 is implemented with `gitee.com/chunanyong/dm v1.8.23`, targeting native,
+Oracle, MySQL and PostgreSQL compatibility modes through DM-native operations.
+No DM server build has been verified yet. See the [DM driver guide](database/dm/README.md)
+for prerequisites, mode distinctions, SQL restrictions and opt-in tests.
 
 Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
-The distributed CLI includes Oracle and the upstream file source.
+The distributed CLI includes Oracle, DM and the upstream file source.
 
 ```sh
 go run ./cmd/migrate-plus -help
@@ -79,7 +84,8 @@ conversion between Oracle versions. See [Oracle setup, script rules, and tests](
 go.mod                 Direct dependency on golang-migrate/v4
 cli/                   Upstream-derived command layer calling upstream migrate
 database/oracle/       Native Oracle driver, unit tests, and opt-in integration tests
-cmd/migrate-plus/      Thin executable entrypoint importing Oracle
+database/dm/           Native DM8 driver, unit tests, and opt-in integration tests
+cmd/migrate-plus/      Thin executable entrypoint importing Oracle and DM
 docs/                  Architecture and design
 .github/workflows/     CI, CodeQL, and tag-based CLI releases
 LICENSE                Project MIT license
@@ -113,7 +119,7 @@ CLI binaries for amd64/arm64. Build artifacts and Linux coverage are retained fo
 Normal tests and builds disable cgo; the separate Linux race test enables cgo
 for Go's race detector. CodeQL analyzes Go on main-branch pushes, pull requests,
 and a weekly schedule. Dependabot checks Go modules and Actions weekly.
-Default tests require no database. Oracle integration tests require an explicitly
+Default tests require no database. Oracle and DM integration tests require an explicitly
 configured disposable schema and destroy its supported objects; see the
 [driver guide](database/oracle/README.md#integration-tests).
 
@@ -122,7 +128,9 @@ Each release includes six `.tar.gz` CLI packages and SHA-256 checksums. Packages
 contain the CLI, this project's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `README.md`;
 the binary's `-version` reports the tag. Tags containing `-` create prereleases.
 
-See [architecture and driver development](docs/DESIGN.md).
+Design documentation: [project architecture](docs/DESIGN.md),
+[Oracle driver](docs/ORACLE_DESIGN.md), and [DM driver](docs/DM_DESIGN.md).
+Connection examples and operational instructions are in each driver package's README.
 
 ## License
 

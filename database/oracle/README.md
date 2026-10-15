@@ -4,6 +4,9 @@ Native [golang-migrate](https://github.com/golang-migrate/migrate) database driv
 using [`github.com/sijms/go-ora/v2 v2.9.0`](https://github.com/sijms/go-ora/tree/v2.9.0).
 No cgo, Oracle client installation, or replacement migration engine is required.
 
+See the [Oracle driver design](../../docs/ORACLE_DESIGN.md) for implementation
+decisions and the [project architecture](../../docs/DESIGN.md) for shared contracts.
+
 ## Compatibility
 
 The target baseline is Oracle **10.2+**, as documented by go-ora v2.9.0.

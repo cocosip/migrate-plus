@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 migrate-plus is licensed under its own [MIT license](LICENSE), copyright
-2026 cocosip. The following notice applies to the derived CLI files.
+2026 cocosip. The notices below describe the derived CLI files and the DM client dependency.
 
 ## golang-migrate CLI
 
@@ -48,3 +48,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+## DM Go client dependency
+
+`database/dm` imports [gitee.com/chunanyong/dm v1.8.23](https://gitee.com/chunanyong/dm/tree/v1.8.23).
+The inspected module archive corresponds to revision
+`8ba262af5d7ddcd733eb21e7485f8831689d8c28`; its source files carry Dameng
+Database Co., Ltd. copyright notices. The archive contains no LICENSE file.
+This project does not attribute MIT terms to that dependency; consult its
+maintainer/vendor for the applicable redistribution terms. Native client source
+is used as a Go module dependency rather than copied into this repository.

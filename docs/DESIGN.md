@@ -1,6 +1,7 @@
 # migrate-plus Architecture & Design
 
-Version: v0.5. Native golang-migrate extensions with Oracle support.
+Scope: project architecture, shared contracts, CLI composition and validation.
+Database-specific designs are maintained separately.
 
 ## 1. Purpose
 
@@ -15,9 +16,9 @@ contributes driver packages implementing upstream interfaces. Upstream owns
 migration scheduling, direction, version transitions, dirty-state recovery,
 source parsing, prefetching, and graceful stopping.
 
-M1 established the skeleton. M2 adds Oracle through `github.com/sijms/go-ora/v2`
-v2.9.0; DM remains future work. Oracle's target compatibility range follows the
-client's documented Oracle 10.2+ baseline, not an unverified server certification.
+Oracle and DM8 drivers are implemented and included in the distributed CLI.
+Their detailed designs, compatibility targets and verification boundaries are
+listed in [Driver designs](#10-driver-designs).
 
 ## 2. Constraints
 
@@ -78,21 +79,24 @@ migrate-plus/
 ├── go.sum
 ├── database/                      # Additional database drivers
 │   ├── oracle/                    # Oracle database.Driver using go-ora v2
-│   └── dm/                        # Future: DM database.Driver
+│   └── dm/                        # DM8 database.Driver using the native DM client
 ├── cli/
 │   ├── main.go                    # Public Main(version string)
 │   ├── commands.go                # Calls upstream migrate operations
 │   ├── log.go                     # Upstream CLI logger
 │   └── main_test.go               # Process-based CLI acceptance tests
 ├── cmd/migrate-plus/
-│   └── main.go                    # Imports Oracle and calls cli.Main
+│   └── main.go                    # Imports Oracle/DM and calls cli.Main
 ├── LICENSE                        # Project MIT license
 ├── THIRD_PARTY_NOTICES.md          # Derived CLI provenance and license
 ├── docs/
+│   ├── DESIGN.md                  # Project architecture and shared contracts
+│   ├── ORACLE_DESIGN.md           # Oracle-specific driver design
+│   └── DM_DESIGN.md               # DM-specific driver design
 └── .github/workflows/ci.yml
 ```
 
-Paths marked future do not exist. There is no local root migrate package,
+There is no local root migrate package,
 base `database` API, source implementation, or shared SQL parser. Add common
 driver helpers only when multiple implemented drivers actually need them.
 
@@ -164,7 +168,7 @@ Each `database/<name>` package must:
    failure recovery, and SQL execution.
 7. Add the driver import to CLI composition only after implementation.
 
-Register directly with the upstream registry, for example in the future DM
+Register directly with the upstream registry, for example in the DM
 package:
 
 ```go
@@ -175,9 +179,9 @@ func init() {
 }
 ```
 
-Here `database` is `github.com/golang-migrate/migrate/v4/database`; `Dm` is not
-implemented. The upstream conformance suite accepts a fresh driver and a
-database-specific `[]byte` migration script, and drops database contents at the
+Here `database` is `github.com/golang-migrate/migrate/v4/database`; `Dm` is
+implemented in `database/dm`. The upstream conformance suite accepts a fresh
+driver and a database-specific `[]byte` migration script, and drops database contents at the
 end. Run it only against dedicated test databases when implementing a driver.
 
 ## 7. Migration State, SQL, Context, and Logging
@@ -217,7 +221,7 @@ blank-import any compatible upstream or external database driver and call the
 same entrypoint. A prebuilt upstream executable cannot load Go packages as
 runtime plugins; new drivers must be compiled into a binary.
 
-The distributed CLI registers native `source/file` and the Oracle driver. The retained commands
+The distributed CLI registers native `source/file`, Oracle and DM drivers. The retained commands
 are `create`, `goto`, `up`, `down`, `drop`, `force`, and database `version`.
 `-version` prints the build version. `-path` expands to a file source URL.
 Create flags remain upstream `-ext`, `-dir`, `-seq`, `-digits`, `-format`, `-tz`.
@@ -231,8 +235,9 @@ For a selected database already supported upstream, import its upstream driver.
 For an additional database such as Oracle or DM, implement `database.Driver` in
 `database/<name>` and import it from `cmd/migrate-plus`. Adding a database must
 not require a separate command dispatcher or database-specific branches in
-`cli`. The CLI help lists only compiled drivers: Oracle is available now; DM
-joins the distributed CLI when its driver is implemented and verified.
+`cli`. The CLI help lists compiled drivers: Oracle and DM are included in the
+distributed CLI; real-server verification
+remains a separate acceptance item.
 
 ## 9. Testing and CI
 
@@ -247,18 +252,29 @@ branch pushes, pull requests, and weekly. Dependabot checks modules and Actions
 weekly. Pushing a `v*` tag reuses CI before publishing six CLI archives with
 embedded tag versions, project license, CLI notices, README, and SHA-256 checksums.
 Tags containing `-` are prereleases. No database
-services are provisioned by the default workflow. Oracle integration tests are
+services are provisioned by the default workflow. Oracle and DM integration tests are
 explicitly enabled against a disposable schema and reuse upstream's conformance
 suite. SQL-boundary unit tests run without a database.
 
-## 10. Milestones
+## 10. Driver designs
 
-| Phase | Scope | Acceptance |
+Use the same documentation structure for every implemented database driver:
+
+| Driver | Detailed design | Usage and operational guide |
 |---|---|---|
-| M1 skeleton | Native upstream dependency, composed CLI, driver onboarding docs, CI | Database-free tests/build/lint pass; no duplicate framework |
-| M2 Oracle | Native go-ora v2 driver, version capabilities, CLI import | Unit checks pass; real-server conformance remains explicit validation |
-| M3 further databases | Add another missing pure-Go driver | Each driver works with the upstream library and composed CLI |
-| M4 distribution | Release binaries, Docker packaging, driver matrix | Supported database set and pure-Go build targets are verified |
+| Oracle | [ORACLE_DESIGN.md](ORACLE_DESIGN.md) | [database/oracle/README.md](../database/oracle/README.md) |
+| DM | [DM_DESIGN.md](DM_DESIGN.md) | [database/dm/README.md](../database/dm/README.md) |
+
+This document owns upstream integration, package boundaries, common migration
+contracts, CLI composition and CI. Each driver design owns dependency decisions,
+server/version capabilities, connection ownership, locking, state SQL, framing,
+Drop behavior and database-specific verification boundaries. Each package README
+owns connection examples, account setup, script examples and test commands.
+
+When adding a driver, add its design and usage guide together and link them
+here. Keep database-specific details out of the project architecture. Update
+compatibility claims only with the corresponding test evidence; neither driver
+currently has real-server certification.
 
 ## 11. Maintenance and Remaining Decisions
 
@@ -266,53 +282,6 @@ Pin and periodically update the upstream module. Review upstream command-layer
 changes separately for the small CLI port, recording local changes in
 `THIRD_PARTY_NOTICES.md`. Do not vendor the migration core or upstream drivers.
 
-Oracle's decisions are recorded below. DM's client and database-specific behavior
-remain undecided. The project uses its own [MIT license](../LICENSE);
-the derived command-layer files retain their [third-party notices](../THIRD_PARTY_NOTICES.md).
-
-## 12. Oracle Driver
-
-- `database/oracle` implements upstream `database.Driver` and registers `oracle`.
-  `WithInstance(*sql.DB, *Config)` accepts a go-ora pool; successful construction
-  transfers pool ownership to the driver. Failed construction leaves the pool
-  with the caller and discards its reserved session.
-- Connections use go-ora v2.9.0. Read actual server version and `COMPATIBLE` once
-  through `DBMS_UTILITY.DB_VERSION`; do not require access to `V$` views. Reject
-  server or compatibility versions below 10.2. Allow 128-byte migration table
-  identifiers only when both versions are at least 12.2; otherwise allow 30.
-  Keep portable SQL shared and add capability branches only for real differences.
-  Version state uses `NUMBER(19)` and numeric dirty flags across all versions.
-- Accept `x-migrations-table` (an unquoted ASCII Oracle identifier, normalized to
-  uppercase) and `x-statement-timeout` (positive milliseconds). Pass native
-  connection parameters through to go-ora; reject unknown migration parameters.
-- Reserve one `*sql.Conn` for the entire driver lifetime. Use `DBMS_LOCK.REQUEST`
-  with `release_on_commit => FALSE` and zero wait, returning upstream `ErrLocked`
-  on contention. Derive the numeric lock ID from schema and table using upstream
-  lock-ID generation, within Oracle's allowed range. Hash collisions can cause
-  unnecessary exclusion, never concurrent migration of the same version table.
-  The account needs `EXECUTE ON SYS.DBMS_LOCK` and `DBMS_UTILITY`, plus privileges
-  and quota needed by its migrations. Initialization locks version-table creation.
-- Persist version changes with transactional `DELETE` and optional `INSERT`;
-  preserve dirty `NilVersion`. Never use `TRUNCATE` for state changes because
-  Oracle DDL commits implicitly. Migration failure retains upstream dirty state;
-  successful earlier DDL cannot be rolled back automatically.
-- Parse ordinary SQL at semicolons outside literals and comments. PL/SQL blocks
-  and stored units retain internal semicolons and are separated by a slash on
-  its own line. Inline `WITH FUNCTION` / `WITH PROCEDURE` SQL also requires a
-  slash boundary; remove its final SQL semicolon while preserving inner ones.
-  Preserve quoted identifiers, escaped strings and Oracle q-quotes.
-  This is driver-local statement framing, not SQL rewriting or SQL*Plus execution.
-  User SQL must target its actual Oracle version; no automatic dialect conversion.
-- `Drop` removes supported user-schema objects, including tables and their
-  dependent indexes/triggers, views, materialized views, sequences, routines,
-  packages, synonyms and types. It does not drop the Oracle user, database,
-  grants, jobs or database links. Close and reopen after dropping.
-- Unit tests cover capabilities, URL/identifier validation, SQL framing, lock
-  contention, cleanup, state rollback and execution failures. Opt-in integration
-  tests cover upstream conformance, independent sessions, DDL lock survival and
-  upstream dirty/force/up/down behavior. Never run destructive tests in a shared
-  schema. No Oracle version is marked verified without a real-server test result.
-
-Implementation order: test and implement version/configuration and SQL framing;
-test and implement the native driver and failure cleanup; compose the CLI and
-update usage documentation; run build, tests, lint and pure-Go cross-builds.
+The project uses its own [MIT license](../LICENSE). Derived command-layer files
+retain their [third-party notices](../THIRD_PARTY_NOTICES.md); database client
+provenance and terms are recorded separately from the project license.
