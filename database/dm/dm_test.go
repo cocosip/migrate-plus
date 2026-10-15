@@ -187,6 +187,7 @@ func TestInitializationRejectsNonnumericVersionColumns(t *testing.T) {
 
 func TestLockReturnCodesAndFailedUnlock(t *testing.T) {
 	d, mock := initializedDriver(t)
+	d.config.StatementTimeout = 10 * time.Millisecond
 	for _, code := range []int{1, 2, 3, 4, 5} {
 		expectLock(mock, code)
 		err := d.Lock()
@@ -194,6 +195,7 @@ func TestLockReturnCodesAndFailedUnlock(t *testing.T) {
 			t.Errorf("lock code %d: %v", code, err)
 		}
 	}
+	d.config.StatementTimeout = 0
 	expectLock(mock, 0)
 	if err := d.Lock(); err != nil {
 		t.Fatal(err)

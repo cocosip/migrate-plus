@@ -86,8 +86,15 @@ quota required by the scripts; the driver does not require a blanket DBA role.
 `DBMS_LOCK.REQUEST` and `RELEASE` require execution privileges. If the package
 is absent, an administrator can install it using
 `SP_CREATE_SYSTEM_PACKAGES(1, 'DBMS_LOCK')`. The driver never installs packages
-or grants itself permissions. Locks use zero wait and survive commit, rollback
-and DDL; upstream migrate controls lock retry/timeout.
+or grants itself permissions. Native lock requests use zero wait; the driver
+retries contention every 100 ms. Locks survive commit, rollback and DDL.
+`Migrate.LockTimeout` (CLI `-lock-timeout`) bounds the caller's wait; upstream
+does not retry or cancel `Driver.Lock`. Always call `Close` after a lock timeout
+to cancel pending acquisition and release any acquired lock.
+`x-statement-timeout` bounds the whole driver lock attempt, including retries.
+It also bounds lock acquisition during initialization, before upstream's lock
+timeout takes effect. Repeated `Lock` calls on the same driver return
+`database.ErrLocked`.
 
 Do not change the current schema, compatibility mode, escaping or routing
 settings during a migrator's lifetime, including indirectly through routines.

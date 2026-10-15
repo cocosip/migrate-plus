@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	dmclient "gitee.com/chunanyong/dm"
 	"github.com/golang-migrate/migrate/v4/database"
@@ -35,6 +36,9 @@ type Dm struct {
 	closed          atomic.Bool
 	closeOnce       sync.Once
 	closeErr        error
+	lockMu          sync.Mutex
+	lockCtx         context.Context
+	stopLock        context.CancelFunc
 }
 
 var _ database.Driver = (*Dm)(nil)
@@ -58,6 +62,7 @@ func WithInstance(instance *sql.DB, config *Config) (_ database.Driver, err erro
 	if err != nil {
 		return nil, err
 	}
+	d.lockCtx, d.stopLock = context.WithCancel(context.Background())
 	defer func() {
 		if err != nil {
 			d.discard()
@@ -146,8 +151,11 @@ func (*Dm) Open(raw string) (database.Driver, error) {
 // Close releases the lock and closes the owned pool. A failed release kills the session.
 func (d *Dm) Close() error {
 	d.closeOnce.Do(func() {
+		d.stopLock()
+		d.lockMu.Lock()
+		defer d.lockMu.Unlock()
 		if d.isLocked.Load() && !d.broken.Load() {
-			d.closeErr = d.Unlock()
+			d.closeErr = d.unlock()
 			if d.closeErr != nil {
 				d.discard()
 			}
@@ -164,26 +172,48 @@ func (d *Dm) Close() error {
 
 // Lock takes an exclusive session lock that survives commit, rollback and DDL.
 func (d *Dm) Lock() error {
+	if !d.lockMu.TryLock() {
+		return database.ErrLocked
+	}
+	defer d.lockMu.Unlock()
 	if err := d.usable(); err != nil {
 		return err
 	}
+	ctx, cancel := d.operationContext()
+	defer cancel()
+	stop := context.AfterFunc(d.lockCtx, cancel)
+	defer stop()
 	return database.CasRestoreOnErr(&d.isLocked, false, true, database.ErrLocked, func() error {
-		code := -1
-		if err := d.exec(`BEGIN ? := DBMS_LOCK.REQUEST(?, 6, 0, FALSE); END;`, sql.Out{Dest: &code}, d.lockID); err != nil {
-			return err
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			code := -1
+			if err := d.execContext(ctx, `BEGIN ? := DBMS_LOCK.REQUEST(?, 6, 0, FALSE); END;`, sql.Out{Dest: &code}, d.lockID); err != nil {
+				return err
+			}
+			if code == 0 {
+				return nil
+			}
+			if code != 1 {
+				return fmt.Errorf("dm: DBMS_LOCK.REQUEST returned %d", code)
+			}
+			select {
+			case <-ctx.Done():
+				return errors.Join(database.ErrLocked, ctx.Err())
+			case <-ticker.C:
+			}
 		}
-		if code == 1 {
-			return database.ErrLocked
-		}
-		if code != 0 {
-			return fmt.Errorf("dm: DBMS_LOCK.REQUEST returned %d", code)
-		}
-		return nil
 	})
 }
 
 // Unlock releases the native lock; a failed release remains retryable on a live session.
 func (d *Dm) Unlock() error {
+	d.lockMu.Lock()
+	defer d.lockMu.Unlock()
+	return d.unlock()
+}
+
+func (d *Dm) unlock() error {
 	return database.CasRestoreOnErr(&d.isLocked, true, false, database.ErrNotLocked, func() error {
 		code := -1
 		if err := d.exec(`BEGIN ? := DBMS_LOCK.RELEASE(?); END;`, sql.Out{Dest: &code}, d.lockID); err != nil {
@@ -350,7 +380,7 @@ func (d *Dm) operationContext() (context.Context, context.CancelFunc) {
 	if d.config.StatementTimeout > 0 {
 		return context.WithTimeout(context.Background(), d.config.StatementTimeout)
 	}
-	return context.Background(), func() {}
+	return context.WithCancel(context.Background())
 }
 
 func (d *Dm) usable() error {
@@ -362,6 +392,7 @@ func (d *Dm) usable() error {
 
 func (d *Dm) discard() {
 	if d.broken.CompareAndSwap(false, true) {
+		d.stopLock()
 		_ = d.conn.Raw(func(any) error { return sqldriver.ErrBadConn })
 	}
 }
@@ -390,11 +421,15 @@ func (d *Dm) operationError(ctx context.Context, query string, err error) error 
 }
 
 func (d *Dm) exec(query string, args ...any) error {
+	ctx, cancel := d.operationContext()
+	defer cancel()
+	return d.execContext(ctx, query, args...)
+}
+
+func (d *Dm) execContext(ctx context.Context, query string, args ...any) error {
 	if err := d.usable(); err != nil {
 		return err
 	}
-	ctx, cancel := d.operationContext()
-	defer cancel()
 	_, err := d.conn.ExecContext(ctx, query, args...)
 	return d.operationError(ctx, query, err)
 }

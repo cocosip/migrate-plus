@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"strings"
@@ -55,15 +56,11 @@ AND object_type IN ('TABLE', 'MATERIALIZED VIEW')`, o.schema).Scan(&count); err 
 		if err := first.Lock(); err != nil {
 			t.Fatal(err)
 		}
-		if err := second.Lock(); !errors.Is(err, database.ErrLocked) {
-			t.Fatalf("independent session entered migration: %v", err)
-		}
+		assertLocked(t, second.(*Oracle))
 		if err := first.Run(strings.NewReader("CREATE TABLE migrate_plus_lock_probe (id NUMBER);")); err != nil {
 			t.Fatal(err)
 		}
-		if err := second.Lock(); !errors.Is(err, database.ErrLocked) {
-			t.Fatalf("DDL released migration lock: %v", err)
-		}
+		assertLocked(t, second.(*Oracle))
 		if err := first.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -130,6 +127,16 @@ INSERT INTO migrate_plus_items VALUES (migrate_plus_seq.NEXTVAL);`)},
 			t.Fatal(err)
 		}
 	})
+}
+
+func assertLocked(t *testing.T, o *Oracle) {
+	t.Helper()
+	// Probe contention without timing out and invalidating the contender session.
+	code := -1
+	err := o.exec(`BEGIN :1 := DBMS_LOCK.REQUEST(id => :2, lockmode => 6, timeout => 0, release_on_commit => FALSE); END;`, sql.Out{Dest: &code}, o.lockID)
+	if err != nil || code != 1 {
+		t.Fatalf("native lock contention = %d, %v", code, err)
+	}
 }
 
 func openTestDriver(t *testing.T, raw string) database.Driver {

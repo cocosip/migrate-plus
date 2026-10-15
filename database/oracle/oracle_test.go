@@ -95,7 +95,9 @@ func initializedDriver(t *testing.T) (*Oracle, sqlmock.Sqlmock) {
 	}
 	o := d.(*Oracle)
 	t.Cleanup(func() {
-		mock.ExpectClose()
+		if db.Stats().OpenConnections > 0 {
+			mock.ExpectClose()
+		}
 		if err := o.Close(); err != nil {
 			t.Error(err)
 		}
@@ -205,10 +207,12 @@ func TestSetVersionHandlesTransactionFailures(t *testing.T) {
 
 func TestLockContentionAndUnlockFailureCanBeRetried(t *testing.T) {
 	o, mock := initializedDriver(t)
+	o.config.StatementTimeout = 10 * time.Millisecond
 	expectLock(mock, 1)
 	if err := o.Lock(); !errors.Is(err, database.ErrLocked) {
 		t.Fatalf("contention = %v", err)
 	}
+	o.config.StatementTimeout = 0
 	expectLock(mock, 0)
 	if err := o.Lock(); err != nil {
 		t.Fatal(err)
@@ -256,6 +260,10 @@ func TestSetVersionPreservesDirtyNilVersionAndRollsBackFailures(t *testing.T) {
 	mock.ExpectRollback()
 	if err := o.SetVersion(8, false); err == nil {
 		t.Fatal("insert failure was swallowed")
+	}
+	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(sqlmock.NewRows([]string{"version", "dirty"}).AddRow(7, 0))
+	if version, dirty, err := o.Version(); err != nil || version != 7 || dirty {
+		t.Fatalf("session unusable after successful rollback: %d, %v, %v", version, dirty, err)
 	}
 	if err := o.SetVersion(-2, false); err == nil {
 		t.Fatal("accepted invalid version")

@@ -62,7 +62,7 @@ configuration. Percent-encode URL credentials, or build the URL with
 ```sh
 go run ./cmd/migrate-plus -path ./migrations -database 'oracle://user:password@localhost:1521/service' up
 go run ./cmd/migrate-plus -path ./migrations -database 'oracle://user:password@localhost:1521/service' down 1
-go run ./cmd/migrate-plus -database 'oracle://user:password@localhost:1521/service' version
+go run ./cmd/migrate-plus -path ./migrations -database 'oracle://user:password@localhost:1521/service' version
 ```
 
 ## Package integration
@@ -130,13 +130,24 @@ applied, while upstream migrate retains the dirty version. Repair the schema
 before using upstream `force` to record the intended version. The driver does
 not silently retry migration SQL after a failure.
 
+An execution timeout or a failed version-transaction commit/rollback discards
+the session. Construct a new migrator and inspect the persisted schema and dirty
+state before continuing; a failed commit may already have reached the server.
+
 ## Locks and dropping
 
 The driver reserves one session for its lifetime. `DBMS_LOCK.REQUEST` uses
 exclusive mode and `release_on_commit => FALSE`, so DDL cannot release the lock.
-Contended locks return upstream `database.ErrLocked` immediately. Closing the
-driver releases the lock and closes the session. Lock IDs are hashes of schema
-and normalized migration table name; rare collisions cause unnecessary
+The driver retries contention every 100 ms. `Migrate.LockTimeout` (CLI
+`-lock-timeout`) bounds the caller's wait; upstream does not retry or cancel
+`Driver.Lock`. Always call `Close` after a lock timeout to cancel pending
+acquisition and release any acquired lock. `x-statement-timeout` bounds the
+whole driver lock attempt, including retries. It also bounds lock acquisition
+during initialization, before upstream's lock timeout takes effect. Repeated
+`Lock` calls on the same driver return `database.ErrLocked`.
+
+Closing the driver releases the lock and closes the session. Lock IDs are
+hashes of schema and normalized migration table name; rare collisions cause unnecessary
 contention. Processes coordinating the same schema must use the same table name.
 
 Upstream `drop` is destructive: it removes the migration schema's user tables

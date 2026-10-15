@@ -201,16 +201,12 @@ func integrationTimeout(t *testing.T, raw string) {
 	if _, _, err := first.Version(); err == nil {
 		t.Fatal("continued on a cancelled session")
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		err := second.Lock()
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, database.ErrLocked) || time.Now().After(deadline) {
-			t.Fatalf("cancelled session retained lock: %v", err)
-		}
-		time.Sleep(50 * time.Millisecond)
+	previous := second.config.StatementTimeout
+	second.config.StatementTimeout = 5 * time.Second
+	err := second.Lock()
+	second.config.StatementTimeout = previous
+	if err != nil {
+		t.Fatalf("cancelled session retained lock: %v", err)
 	}
 	if err := second.Drop(); err != nil {
 		t.Fatal(err)
@@ -272,8 +268,11 @@ func mustExec(t *testing.T, d *Dm, script string) {
 
 func assertLocked(t *testing.T, d *Dm) {
 	t.Helper()
-	if err := d.Lock(); !errors.Is(err, database.ErrLocked) {
-		t.Fatalf("independent session entered migration: %v", err)
+	// Probe contention without timing out and invalidating the contender session.
+	code := -1
+	err := d.exec(`BEGIN ? := DBMS_LOCK.REQUEST(?, 6, 0, FALSE); END;`, sql.Out{Dest: &code}, d.lockID)
+	if err != nil || code != 1 {
+		t.Fatalf("native lock contention = %d, %v", code, err)
 	}
 }
 

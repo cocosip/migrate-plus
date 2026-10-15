@@ -9,7 +9,9 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4/database"
 	go_ora "github.com/sijms/go-ora/v2"
@@ -21,12 +23,19 @@ func init() {
 
 // Oracle holds a dedicated session so DDL cannot release the migration lock.
 type Oracle struct {
-	db       *sql.DB
-	conn     *sql.Conn
-	config   Config
-	schema   string
-	lockID   int64
-	isLocked atomic.Bool
+	db        *sql.DB
+	conn      *sql.Conn
+	config    Config
+	schema    string
+	lockID    int64
+	isLocked  atomic.Bool
+	broken    atomic.Bool
+	closed    atomic.Bool
+	lockMu    sync.Mutex
+	lockCtx   context.Context
+	stopLock  context.CancelFunc
+	closeOnce sync.Once
+	closeErr  error
 }
 
 var _ database.Driver = (*Oracle)(nil)
@@ -48,10 +57,11 @@ func WithInstance(instance *sql.DB, config *Config) (_ database.Driver, err erro
 	if err != nil {
 		return nil, err
 	}
+	o.lockCtx, o.stopLock = context.WithCancel(context.Background())
 	defer func() {
 		if err != nil {
 			// Never return a session with a possibly unreleased lock to the pool.
-			_ = o.conn.Raw(func(any) error { return sqldriver.ErrBadConn })
+			o.discard()
 		}
 	}()
 	if err = o.initialize(); err != nil {
@@ -115,38 +125,74 @@ func (*Oracle) Open(raw string) (database.Driver, error) {
 
 // Close releases the migration lock and closes the session and owned pool.
 func (o *Oracle) Close() error {
-	var unlockErr error
-	if o.isLocked.Load() {
-		unlockErr = o.Unlock()
-	}
-	connErr := o.conn.Close()
-	if errors.Is(connErr, sql.ErrConnDone) {
-		connErr = nil
-	}
-	return errors.Join(unlockErr, connErr, o.db.Close())
+	o.closeOnce.Do(func() {
+		o.stopLock()
+		o.lockMu.Lock()
+		defer o.lockMu.Unlock()
+		if o.isLocked.Load() && !o.broken.Load() {
+			o.closeErr = o.unlock()
+			if o.closeErr != nil {
+				o.discard()
+			}
+		}
+		o.closed.Store(true)
+		connErr := o.conn.Close()
+		if errors.Is(connErr, sql.ErrConnDone) {
+			connErr = nil
+		}
+		o.closeErr = errors.Join(o.closeErr, connErr, o.db.Close())
+	})
+	return o.closeErr
 }
 
 // Lock acquires a session lock that survives Oracle's implicit DDL commits.
 func (o *Oracle) Lock() error {
+	if !o.lockMu.TryLock() {
+		return database.ErrLocked
+	}
+	defer o.lockMu.Unlock()
+	if err := o.usable(); err != nil {
+		return err
+	}
+	ctx, cancel := o.operationContext()
+	defer cancel()
+	stop := context.AfterFunc(o.lockCtx, cancel)
+	defer stop()
 	return database.CasRestoreOnErr(&o.isLocked, false, true, database.ErrLocked, func() error {
-		code := -1
-		query := `BEGIN :1 := DBMS_LOCK.REQUEST(id => :2, lockmode => 6, timeout => 0, release_on_commit => FALSE); END;`
-		if err := o.exec(query, sql.Out{Dest: &code}, o.lockID); err != nil {
-			return err
-		}
-		switch code {
-		case 0:
-			return nil
-		case 1, 4:
-			return database.ErrLocked
-		default:
-			return fmt.Errorf("oracle: DBMS_LOCK.REQUEST returned %d", code)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			code := -1
+			query := `BEGIN :1 := DBMS_LOCK.REQUEST(id => :2, lockmode => 6, timeout => 0, release_on_commit => FALSE); END;`
+			if err := o.execContext(ctx, query, sql.Out{Dest: &code}, o.lockID); err != nil {
+				return err
+			}
+			switch code {
+			case 0:
+				return nil
+			case 1:
+			case 4:
+				return database.ErrLocked
+			default:
+				return fmt.Errorf("oracle: DBMS_LOCK.REQUEST returned %d", code)
+			}
+			select {
+			case <-ctx.Done():
+				return errors.Join(database.ErrLocked, ctx.Err())
+			case <-ticker.C:
+			}
 		}
 	})
 }
 
 // Unlock releases the session lock; a failed release can be retried.
 func (o *Oracle) Unlock() error {
+	o.lockMu.Lock()
+	defer o.lockMu.Unlock()
+	return o.unlock()
+}
+
+func (o *Oracle) unlock() error {
 	return database.CasRestoreOnErr(&o.isLocked, true, false, database.ErrNotLocked, func() error {
 		code := -1
 		query := `BEGIN :1 := DBMS_LOCK.RELEASE(:2); END;`
@@ -162,6 +208,9 @@ func (o *Oracle) Unlock() error {
 
 // Run frames Oracle SQL/PLSQL statements and executes them without rewriting.
 func (o *Oracle) Run(migration io.Reader) error {
+	if err := o.usable(); err != nil {
+		return err
+	}
 	script, err := io.ReadAll(migration)
 	if err != nil {
 		return err
@@ -183,15 +232,26 @@ func (o *Oracle) SetVersion(version int, dirty bool) (err error) {
 	if version < database.NilVersion {
 		return fmt.Errorf("oracle: version must be at least %d", database.NilVersion)
 	}
+	if err := o.usable(); err != nil {
+		return err
+	}
 	ctx, cancel := o.operationContext()
 	defer cancel()
+	defer func() {
+		if ctx.Err() != nil {
+			err = errors.Join(err, ctx.Err())
+			o.discard()
+		}
+	}()
 	tx, err := o.conn.BeginTx(ctx, nil)
 	if err != nil {
+		o.discard()
 		return err
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
 			err = errors.Join(err, rollbackErr)
+			o.discard()
 		}
 	}()
 	query := `DELETE FROM ` + o.versionTable()
@@ -208,11 +268,18 @@ func (o *Oracle) SetVersion(version int, dirty bool) (err error) {
 			return queryError(query, err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		o.discard()
+		return err
+	}
+	return nil
 }
 
 // Version returns NilVersion for an empty version table.
 func (o *Oracle) Version() (int, bool, error) {
+	if err := o.usable(); err != nil {
+		return 0, false, err
+	}
 	ctx, cancel := o.operationContext()
 	defer cancel()
 	var version, dirty int
@@ -263,10 +330,36 @@ func (o *Oracle) operationContext() (context.Context, context.CancelFunc) {
 func (o *Oracle) exec(query string, args ...any) error {
 	ctx, cancel := o.operationContext()
 	defer cancel()
-	if _, err := o.conn.ExecContext(ctx, query, args...); err != nil {
+	return o.execContext(ctx, query, args...)
+}
+
+func (o *Oracle) execContext(ctx context.Context, query string, args ...any) error {
+	if err := o.usable(); err != nil {
+		return err
+	}
+	_, err := o.conn.ExecContext(ctx, query, args...)
+	if ctx.Err() != nil {
+		err = errors.Join(err, ctx.Err())
+		o.discard()
+	}
+	if err != nil {
 		return queryError(query, err)
 	}
 	return nil
+}
+
+func (o *Oracle) usable() error {
+	if o.broken.Load() || o.closed.Load() {
+		return fmt.Errorf("oracle: migration session is closed; construct a new driver: %w", sql.ErrConnDone)
+	}
+	return nil
+}
+
+func (o *Oracle) discard() {
+	if o.broken.CompareAndSwap(false, true) {
+		o.stopLock()
+		_ = o.conn.Raw(func(any) error { return sqldriver.ErrBadConn })
+	}
 }
 
 func queryError(query string, err error) error {

@@ -80,10 +80,15 @@ than a shared GORM/application pool needed afterward.
 ## 5. Locking and failure lifecycle
 
 Use `DBMS_LOCK.REQUEST` in exclusive mode, with zero wait and
-`release_on_commit => FALSE`. The session lock survives DDL commits. Upstream
-migrate controls lock retry and timeout; contention returns upstream `ErrLocked`.
-Local lock state uses upstream lock sentinels and `CasRestoreOnErr`; failed
-release remains retryable.
+`release_on_commit => FALSE`. The session lock survives DDL commits. The driver
+retries contention every 100 ms; its per-operation timeout bounds the whole
+attempt. Upstream `Migrate.LockTimeout` bounds the caller's wait without retrying
+or cancelling `Driver.Lock`. Call `Close` after a lock timeout; it cancels and
+waits for pending acquisition before releasing the session. Initialization
+precedes upstream's timeout and uses the configured statement timeout for lock
+acquisition. Local lock state uses upstream lock sentinels and
+`CasRestoreOnErr`; repeated `Lock` returns `ErrLocked`, and a failed release
+remains retryable on a live session.
 
 Derive the numeric ID using upstream `GenerateAdvisoryLockId` from the original
 schema and normalized table name, masked to Oracle's `0..1073741823` range.
@@ -101,6 +106,10 @@ Upstream drives `SetVersion(version, true)`, `Run`, then
 `SetVersion(version, false)`. Persist changes with transactional `DELETE` and
 optional `INSERT`; preserve dirty `NilVersion` and empty clean state. Never use
 `TRUNCATE` for state changes because Oracle DDL commits implicitly.
+Failed begin/commit/rollback operations discard the reserved session rather
+than risk continuing with uncertain transaction state. Execution timeouts also
+discard the session. Recovery requires a new driver and inspection of persisted
+state; no migration SQL is replayed.
 
 Run framed statements sequentially on the reserved session and stop at the
 first failure. Failed migrations retain upstream dirty state; earlier DDL may

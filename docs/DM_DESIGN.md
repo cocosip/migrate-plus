@@ -193,10 +193,14 @@ driver uses `id` and `lockmode`. Derive a numeric lock ID through upstream
 `0..1073741823`, and do not call `ALLOCATE_UNIQUE`.
 
 The exclusive lock must survive commit, rollback and DDL until explicit release
-or physical session termination. `Lock` is nonblocking; upstream controls retry
-and lock timeout. REQUEST result 0 succeeds, 1 returns upstream `ErrLocked`.
-Other return values are errors with the native code. In particular, do not
-reuse Oracle's interpretation of result 4: DM's published table describes it
+or physical session termination. REQUEST result 0 succeeds; result 1 is retried
+every 100 ms until acquisition, the configured statement timeout, or `Close`.
+The statement timeout bounds the whole lock attempt, including initialization.
+Upstream `Migrate.LockTimeout` bounds the caller's wait without retrying or
+cancelling `Driver.Lock`. Call `Close` after a lock timeout; it cancels and waits
+for pending acquisition before releasing the session. Initialization precedes
+upstream's timeout. Other return values are errors with the native code. In
+particular, do not reuse Oracle's interpretation of result 4: DM's published table describes it
 as not owning the lock. Local repeated Lock/Unlock calls use upstream lock
 sentinels; a failed native release must not clear local locked state.
 
