@@ -9,6 +9,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
 	"strconv"
@@ -219,7 +220,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		}
 
 		v, err := strconv.ParseUint(gotoSet.Arg(0), 10, 64)
-		if err != nil {
+		if err != nil || v > math.MaxUint {
 			log.fatal("error: can't read version argument V")
 		}
 
@@ -247,7 +248,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		limit := -1
 		if upSet.NArg() > 0 {
 			n, err := strconv.ParseUint(upSet.Arg(0), 10, 64)
-			if err != nil {
+			if err != nil || n > math.MaxInt {
 				log.fatal("error: can't read limit argument N")
 			}
 			limit = int(n)
@@ -353,7 +354,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 			log.fatal("error: please specify version argument V")
 		}
 
-		v, err := strconv.ParseInt(forceSet.Arg(0), 10, 64)
+		v, err := strconv.Atoi(forceSet.Arg(0))
 		if err != nil {
 			log.fatal("error: can't read version argument V")
 		}
@@ -362,7 +363,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 			log.fatal("error: argument V must be >= -1")
 		}
 
-		if err := forceCmd(migrater, int(v)); err != nil {
+		if err := forceCmd(migrater, v); err != nil {
 			log.fatalErr(err)
 		}
 

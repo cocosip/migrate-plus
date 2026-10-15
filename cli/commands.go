@@ -7,6 +7,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -241,7 +242,7 @@ func numDownMigrationsFromArgs(applyAll bool, args []string) (int, bool, error) 
 	case 1:
 		downValue := args[0]
 		n, err := strconv.ParseUint(downValue, 10, 64)
-		if err != nil {
+		if err != nil || n > math.MaxInt {
 			return 0, false, errors.New("can't read limit argument N")
 		}
 		return int(n), false, nil

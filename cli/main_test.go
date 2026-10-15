@@ -7,12 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/golang-migrate/migrate/v4/database"
 )
 
 // Main uses process flags and exits, so each invocation needs a fresh process.
 func TestCLIProcess(t *testing.T) {
 	if os.Getenv("MIGRATE_PLUS_TEST_CLI") != "1" {
 		return
+	}
+	if os.Getenv("MIGRATE_PLUS_TEST_DATABASE") == "1" {
+		database.Register("clitest", &integerTestDatabase{})
 	}
 	for i, arg := range os.Args {
 		if arg == "--" {
