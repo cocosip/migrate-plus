@@ -11,19 +11,20 @@ API come from golang-migrate; they are not implemented again here.
 
 ## Current status
 
-M1 provides the module dependency, CLI composition, documentation, and CI.
-Go 1.26 or newer and `CGO_ENABLED=0` are required; CI runs Go 1.27.x.
-There are **no database drivers or
-database connections yet**. Oracle and DM are planned, not available packages.
+Oracle is implemented with `github.com/sijms/go-ora/v2 v2.9.0`. Its target range
+follows go-ora's documented Oracle 10.2+ baseline. The driver reads the server
+version and `COMPATIBLE` at connection time to select supported capabilities.
+Real-server verification is separate from that compatibility target; no server
+version has been verified by this repository yet. DM remains planned.
 
-The CLI uses upstream commands and the native file source. It can print help,
-print its build version, and create migration files. Migration commands need a
-database driver compiled into the binary; this milestone includes none.
+Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
+The distributed CLI includes Oracle and the upstream file source.
 
 ```sh
 go run ./cmd/migrate-plus -help
 go run ./cmd/migrate-plus -version
 go run ./cmd/migrate-plus create -ext sql -dir ./migrations -seq init
+go run ./cmd/migrate-plus -path ./migrations -database 'oracle://user:password@localhost:1521/service' up
 ```
 
 `-version` prints the binary build version. The `version` command queries a
@@ -31,8 +32,7 @@ configured database's migration version.
 
 ## Library integration
 
-Once a driver is implemented, its consumers use the upstream library directly.
-This is the planned DM usage, **not a runnable M1 example**:
+Consumers use the upstream library directly:
 
 ```go
 import (
@@ -40,7 +40,7 @@ import (
 
     "github.com/golang-migrate/migrate/v4"
     _ "github.com/golang-migrate/migrate/v4/source/file"
-    _ "github.com/cocosip/migrate-plus/database/dm"
+    _ "github.com/cocosip/migrate-plus/database/oracle"
 )
 
 m, err := migrate.New("file://migrations", databaseURL)
@@ -55,19 +55,25 @@ if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 
 Use upstream `source/iofs.New(fsys, path)` with
 `migrate.NewWithSourceInstance` for embedded migration files. Use the database
-package's future `WithInstance` function and `migrate.NewWithDatabaseInstance`
+package's `WithInstance` function and `migrate.NewWithDatabaseInstance`
 or `migrate.NewWithInstance` when reusing a database connection.
 
 Existing database and source drivers remain upstream imports. They do not need
 to be copied into migrate-plus. A compiled upstream CLI cannot discover an
 additional Go driver at runtime; that driver must be included in a CLI build.
 
+Oracle uses a session lock that survives DDL commits. The migration account
+requires `EXECUTE ON SYS.DBMS_LOCK`, `DBMS_UTILITY`, and the privileges/quota
+required by its scripts. User SQL is executed as written, without automatic
+conversion between Oracle versions. See [Oracle setup, script rules, and tests](database/oracle/README.md).
+
 ## Layout
 
 ```text
 go.mod                 Direct dependency on golang-migrate/v4
 cli/                   Upstream-derived command layer calling upstream migrate
-cmd/migrate-plus/      Thin executable entrypoint and future driver imports
+database/oracle/       Native Oracle driver, unit tests, and opt-in integration tests
+cmd/migrate-plus/      Thin executable entrypoint importing Oracle
 docs/                  Architecture and design
 .github/workflows/     Go 1.27 build, test, and lint jobs
 LICENSE                Project MIT license
@@ -96,7 +102,9 @@ go build -trimpath -ldflags '-X main.Version=dev' -o bin/migrate-plus.exe ./cmd/
 
 GitHub Actions tests on Linux and Windows, cross-builds Linux/macOS/Windows for
 amd64/arm64, and uses golangci-lint v2.14.0, matching the local installation.
-No database service or credentials are required for M1.
+Default tests require no database. Oracle integration tests require an explicitly
+configured disposable schema and destroy its supported objects; see the
+[driver guide](database/oracle/README.md#integration-tests).
 
 See [architecture and driver development](docs/DESIGN.md).
 
