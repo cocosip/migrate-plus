@@ -1,6 +1,7 @@
 package oracle
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -321,12 +323,18 @@ type failingReader struct{}
 func (failingReader) Read([]byte) (int, error) { return 0, fmt.Errorf("read failed") }
 
 func TestRunBoundsStatementExecution(t *testing.T) {
-	o, mock := initializedDriver(t)
-	o.config.StatementTimeout = time.Millisecond
-	mock.ExpectExec(`BEGIN NULL; END;`).WillDelayFor(100 * time.Millisecond).WillReturnResult(sqlmock.NewResult(0, 0))
-	if err := o.Run(strings.NewReader("BEGIN NULL; END;\n/")); err == nil {
-		t.Fatal("statement timeout was ignored")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		o, mock := initializedDriver(t)
+		o.config.StatementTimeout = time.Millisecond
+		mock.ExpectExec(`BEGIN NULL; END;`).WillDelayFor(100 * time.Millisecond).WillReturnResult(sqlmock.NewResult(0, 0))
+		var dbErr *database.Error
+		if err := o.Run(strings.NewReader("BEGIN NULL; END;\n/")); !errors.As(err, &dbErr) || !errors.Is(dbErr.OrigErr, context.DeadlineExceeded) {
+			t.Fatalf("statement deadline error was lost: %v", err)
+		}
+		if err := o.Run(strings.NewReader("SELECT 1 FROM dual;")); !errors.Is(err, sql.ErrConnDone) {
+			t.Fatalf("reused a timed out session: %v", err)
+		}
+	})
 }
 
 func expectDropPreflight(mock sqlmock.Sqlmock) {
