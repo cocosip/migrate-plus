@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -29,9 +30,109 @@ func TestIntegration(t *testing.T) {
 	t.Run("DML remains durable after SetVersion commit and rollback", func(t *testing.T) { integrationDurability(t, raw) })
 	t.Run("upstream dirty force and down", func(t *testing.T) { integrationDirtyRecovery(t, raw) })
 	t.Run("up and repeated up", func(t *testing.T) { integrationRepeatedUp(t, raw) })
+	t.Run("existing version table upgrade", func(t *testing.T) { integrationExistingVersionTable(t, raw) })
 	t.Run("closed native session is not replaced", func(t *testing.T) { integrationLostSession(t, raw) })
 	t.Run("timeout terminates locked session", func(t *testing.T) { integrationTimeout(t, raw) })
 	t.Run("cross schema dependency prevents destructive Drop", func(t *testing.T) { integrationCrossSchema(t, raw) })
+}
+
+func integrationExistingVersionTable(t *testing.T, raw string) {
+	for _, columnType := range []string{bitType, smallintType, integerType, bigintType, "DECIMAL(19,0)"} {
+		for _, initialDirty := range []int{0, 1} {
+			t.Run(fmt.Sprintf("%s/%d", columnType, initialDirty), func(t *testing.T) {
+				integrationExistingVersionState(t, raw, columnType, initialDirty)
+			})
+		}
+	}
+}
+
+func integrationExistingVersionState(t *testing.T, raw, columnType string, initialDirty int) {
+	setup := openTestDriver(t, raw)
+	const table = "MIGRATE_PLUS_LEGACY_STATE"
+	qualified := quoteIdentifier(setup.schema) + "." + quoteIdentifier(table)
+	mustExec(t, setup, `CREATE TABLE `+qualified+` (VERSION BIGINT, DIRTY `+columnType+`)`)
+	t.Cleanup(func() {
+		if err := setup.exec("DROP TABLE " + qualified + " RESTRICT"); err != nil {
+			t.Error(err)
+		}
+	})
+	mustExec(t, setup, fmt.Sprintf("INSERT INTO %s VALUES(7, %d)", qualified, initialDirty))
+	mustExec(t, setup, "CREATE TABLE migrate_plus_legacy_probe(id BIGINT)")
+	t.Cleanup(func() {
+		if err := setup.exec("DROP TABLE migrate_plus_legacy_probe RESTRICT"); err != nil {
+			t.Error(err)
+		}
+	})
+	var nativeDirty any
+	if err := setup.conn.QueryRowContext(context.Background(), "SELECT DIRTY FROM "+qualified).Scan(&nativeDirty); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%s DIRTY actual return: %T(%v)", columnType, nativeDirty, nativeDirty)
+	dsn, config, err := parseURL(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MigrationsTable = table
+	pool, err := sql.Open("dm", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := WithInstance(pool, config)
+	if err != nil {
+		_ = pool.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if v, dirty, err := d.Version(); err != nil || v != 7 || dirty != (initialDirty == 1) {
+		t.Fatalf("existing history = %d, %v, %v", v, dirty, err)
+	}
+	source, err := iofs.New(fstest.MapFS{
+		"7_old.up.sql":  &fstest.MapFile{Data: []byte("DO NOT REPLAY")},
+		"8_next.up.sql": &fstest.MapFile{Data: []byte("INSERT INTO migrate_plus_legacy_probe VALUES(8);")},
+	}, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	m, err := migrate.NewWithInstance("iofs", source, "dm", d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initialDirty == 1 {
+		var dirtyErr migrate.ErrDirty
+		if err := m.Up(); !errors.As(err, &dirtyErr) || dirtyErr.Version != 7 {
+			t.Fatalf("dirty Up = %v", err)
+		}
+		if v, dirty, err := d.Version(); err != nil || v != 7 || !dirty {
+			t.Fatalf("dirty state changed = %d, %v, %v", v, dirty, err)
+		}
+		// Recovery here is explicit test setup, never an initialization side effect.
+		if err := d.SetVersion(7, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.Up(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Up(); !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatalf("repeated Up = %v", err)
+	}
+	if v, dirty, err := d.Version(); err != nil || v != 8 || dirty {
+		t.Fatalf("upgraded state = %d, %v, %v", v, dirty, err)
+	}
+	assertCount(t, setup, "migrate_plus_legacy_probe", 1)
+	for _, state := range []bool{true, false} {
+		if err := d.SetVersion(9, state); err != nil {
+			t.Fatal(err)
+		}
+		if v, dirty, err := d.Version(); err != nil || v != 9 || dirty != state {
+			t.Fatalf("round trip = %d, %v, %v", v, dirty, err)
+		}
+	}
 }
 
 func integrationDrop(t *testing.T, raw string) {

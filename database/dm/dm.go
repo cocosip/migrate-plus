@@ -318,14 +318,22 @@ func (d *Dm) Version() (version int, dirty bool, err error) {
 		if !rows.Next() {
 			return nil
 		}
-		var dirtyValue int
+		var dirtyValue any
 		if err := rows.Scan(&version, &dirtyValue); err != nil {
 			return err
 		}
-		if version < database.NilVersion || (dirtyValue != 0 && dirtyValue != 1) || rows.Next() {
+		if version < database.NilVersion || rows.Next() {
 			return fmt.Errorf("dm: corrupt or multiple migration state rows")
 		}
-		dirty = dirtyValue == 1
+		// The native client returns BIT/integer widths directly and integral DECIMAL as text.
+		switch dirtyValue {
+		case false, int8(0), int16(0), int32(0), int64(0), "0":
+			dirty = false
+		case true, int8(1), int16(1), int32(1), int64(1), "1":
+			dirty = true
+		default:
+			return fmt.Errorf("dm: invalid DIRTY value %v (%T); expected 0/false or 1/true", dirtyValue, dirtyValue)
+		}
 		return nil
 	})
 	return version, dirty, err
@@ -378,7 +386,7 @@ func validateVersionColumns(rows *sql.Rows) error {
 		precision, scale, sized := column.DecimalSize()
 		switch strings.ToUpper(column.DatabaseTypeName()) {
 		case "BIGINT":
-		case "SMALLINT", "INTEGER", "INT", "TINYINT":
+		case "SMALLINT", "INTEGER", "INT", "TINYINT", "BIT":
 			if i == 0 {
 				return fmt.Errorf("dm: VERSION requires a 64-bit integer column")
 			}

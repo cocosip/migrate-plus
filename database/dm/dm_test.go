@@ -25,6 +25,13 @@ const (
 	versionColumn = "VERSION"
 	historyTable  = "HISTORY"
 	historyInput  = "history"
+	bigintType    = "BIGINT"
+	bitType       = "BIT"
+	smallintType  = "SMALLINT"
+	integerType   = "INTEGER"
+	decimalType   = "DECIMAL"
+	numberType    = "NUMBER"
+	varcharType   = "VARCHAR"
 	metadataQuery = `SELECT CURRENT_SCHID(), SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID()),
 SF_GET_PARA_VALUE(2, 'COMPATIBLE_MODE'), SF_GET_CASE_SENSITIVE_FLAG(),
 SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE') FROM DUAL`
@@ -32,7 +39,7 @@ SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE') FROM DUAL`
 
 func mockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	t.Helper()
-	db, mock, err := sqlmock.New()
+	db, mock, err := sqlmock.New(sqlmock.ValueConverterOption(dmValueConverter{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,6 +50,18 @@ func mockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 		_ = db.Close()
 	})
 	return db, mock
+}
+
+type dmValueConverter struct{}
+
+func (dmValueConverter) ConvertValue(value any) (driver.Value, error) {
+	// Match native DM rows without sqlmock normalizing narrow integers to int64.
+	switch value.(type) {
+	case int8, int16, int32:
+		return value, nil
+	default:
+		return driver.DefaultParameterConverter.ConvertValue(value)
+	}
 }
 
 func expectMetadata(mock sqlmock.Sqlmock, mode, caseSensitive, backslash int) {
@@ -62,7 +81,7 @@ func expectUnlock(mock sqlmock.Sqlmock, code int) {
 }
 
 func versionColumns() *sqlmock.Rows {
-	return sqlmock.NewRowsWithColumnDefinition(sqlmock.NewColumn(versionColumn).OfType("BIGINT", int64(0)), sqlmock.NewColumn(dirtyColumn).OfType("SMALLINT", int64(0)))
+	return sqlmock.NewRowsWithColumnDefinition(sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0)), sqlmock.NewColumn(dirtyColumn).OfType(smallintType, int64(0)))
 }
 
 func expectVersionTable(mock sqlmock.Sqlmock, exists bool) {
@@ -190,7 +209,7 @@ func TestInitializationRejectsNonnumericVersionColumns(t *testing.T) {
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
 	mock.ExpectQuery(`SELECT "VERSION", "DIRTY".*WHERE 1 = 0`).WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
-		sqlmock.NewColumn(versionColumn).OfType("VARCHAR", ""), sqlmock.NewColumn(dirtyColumn).OfType("SMALLINT", int64(0))))
+		sqlmock.NewColumn(versionColumn).OfType(varcharType, ""), sqlmock.NewColumn(dirtyColumn).OfType(smallintType, int64(0))))
 	expectUnlock(mock, 0)
 	mock.ExpectClose()
 	if _, err := WithInstance(db, nil); err == nil {

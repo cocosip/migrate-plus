@@ -129,6 +129,18 @@ uncertainty terminates the session; construct a new migrator and inspect the
 persisted dirty state. No SQL is replayed. DDL and successful earlier SQL may
 already be committed; migrations are not promised atomic rollback.
 
+## Existing migration state
+
+An existing `SCHEMA_MIGRATIONS (VERSION BIGINT, DIRTY BIT)` table is accepted
+without alteration or initialization writes. `BIT` is allowed only for `DIRTY`;
+`VERSION` still requires `BIGINT` or an integral numeric column with at least
+19 digits of precision. Existing integer/numeric `DIRTY` columns remain supported.
+Only 0/false and 1/true are accepted; NULL, invalid values and multiple rows fail.
+The native client returns BIT as `int8`, integer columns as signed integer widths,
+and integral DECIMAL values as strings; boolean dirty values are also handled.
+An empty table means `database.NilVersion`. Existing dirty history remains dirty
+and upstream `Up` refuses it until the caller explicitly resolves that state.
+
 ## SQL scripts
 
 Ordinary SQL uses semicolons outside single/double quotes and comments. Doubled
@@ -182,7 +194,9 @@ $env:MIGRATE_PLUS_DM_TEST_URL = 'dm://test_user:password@localhost:5236?schema=T
 go test -count=1 -v ./database/dm -run '^TestIntegration$'
 ```
 
-Tests cover upstream conformance, dirty/force/down, DML durability, lock survival
+Tests cover existing BIT/integer version tables (logging actual dirty return
+types), clean/dirty preservation, SetVersion round trips, upgrade/repeated Up,
+upstream conformance, dirty/force/down, DML durability, lock survival
 across transactions/DDL, timeout termination, routines and native Drop ordering.
 Set `MIGRATE_PLUS_DM_TEST_MATERIALIZED=1` to also test ordinary/prebuilt
 materialized views on builds/accounts supporting them. Set

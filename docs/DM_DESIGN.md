@@ -260,8 +260,13 @@ CREATE TABLE "APP"."SCHEMA_MIGRATIONS" (
 Use DM-native catalogs scoped to the resolved schema, the documented
 `SYS.SYSOBJECTS` table for discovery and `SYS.SYSCONS`/`SYS.SYSDEPENDENCIES`
 for Drop, independent of compatibility views. Confirm table columns and
-numeric dirty values before using a pre-existing state table; do not silently
+dirty values before using a pre-existing state table; do not silently
 claim compatibility with an arbitrary application's migration history.
+Legacy `VERSION BIGINT, DIRTY BIT` tables are accepted without alteration or
+initialization writes. BIT compatibility applies only to DIRTY; VERSION retains
+its 64-bit integral requirement. The native client returns BIT as int8, integers
+as int8/int16/int32/int64 and integral DECIMAL as text. Read only exact 0/1 or
+false/true dirty states and reject NULL, other values and unsupported types.
 
 `SetVersion` uses a transaction containing DELETE plus optional INSERT. Preserve
 upstream dirty `NilVersion` and empty clean state. Do not use TRUNCATE, a
