@@ -11,8 +11,10 @@ and the [project architecture](../../docs/DESIGN.md) for shared contracts.
 The target is DM8 across multiple builds. Initialization identifies the product
 from `V$VERSION` and reads the actual schema, case sensitivity and effective
 `BACKSLASH_ESCAPE`. Missing functions, privileges or unsupported settings fail
-initialization. No DM server build has been verified yet; unit tests and
-cross-builds do not certify native SQL or database behavior.
+initialization. Lock and migration lifecycle tests have been run on DM8
+8.1.4.80 in Oracle compatibility mode. This does not certify every feature:
+the native Drop test exposed a separate catalog-filter problem. See the
+[reproduction and validation report](../../docs/DM_LOCK_COMPATIBILITY.md).
 
 `BACKSLASH_ESCAPE` is a static INI parameter. Initialization reads its active
 memory value with `SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE')`, not the on-disk
@@ -25,7 +27,7 @@ neither compatibility mode nor a default value substitutes for this check.
 | Server `COMPATIBLE_MODE` | Target | Real-server verification |
 |---|---|---|
 | 0 | Native DM | Not run |
-| 2 | Oracle compatibility | Not run |
+| 2 | Oracle compatibility | Lock/migration lifecycle passed on 8.1.4.80; native Drop test failed |
 | 4 | MySQL compatibility | Not run |
 | 7 | PostgreSQL compatibility | Not run |
 
@@ -105,7 +107,9 @@ quota required by the scripts; the driver does not require a blanket DBA role.
 `DBMS_LOCK.REQUEST` and `RELEASE` require execution privileges. If the package
 is absent, an administrator can install it using
 `SP_CREATE_SYSTEM_PACKAGES(1, 'DBMS_LOCK')`. The driver never installs packages
-or grants itself permissions. Native lock requests use zero wait; the driver
+or grants itself permissions. Lock requests and releases use SELECT plus Scan,
+binding only the lock ID, to avoid an anonymous-block mixed OUT/IN binding
+failure reproduced on the tested build. Native lock requests use zero wait; the driver
 retries contention every 100 ms. Locks survive commit, rollback and DDL.
 `Migrate.LockTimeout` (CLI `-lock-timeout`) bounds the caller's wait; upstream
 does not retry or cancel `Driver.Lock`. Always call `Close` after a lock timeout
@@ -189,3 +193,11 @@ sentinel preservation. Missing optional prerequisites are reported as skipped.
 Run against an older and a recent DM8 build in each target mode; record exact
 build, case, escaping, DDL commit settings and results before claiming tested
 compatibility. See [design and source references](../../docs/DM_DESIGN.md).
+
+For a standalone database/sql comparison of legacy SELECT, bound SELECT and
+anonymous-block calls, set `MIGRATE_PLUS_DM_LOCK_PROBE_DSN` to a native DM DSN
+and run `go test -count=1 -v ./database/dm -run '^(TestLockCompatibility|TestLockProbeMetadata)$'`.
+These diagnostics use a fresh physical session for every case, perform no
+DDL/Drop, and stop at the first error in each case. The diagnostic command is
+expected to fail for incompatible anonymous-block cases; it is not the normal
+regression suite. Do not set its DSN when running the ordinary test suite.

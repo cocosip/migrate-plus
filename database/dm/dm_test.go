@@ -6,7 +6,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -21,6 +20,7 @@ const (
 	testSchema    = "APP"
 	testProduct   = "DM Database Server 64 V8"
 	countColumn   = "count"
+	codeColumn    = "CODE"
 	dirtyColumn   = "DIRTY"
 	versionColumn = "VERSION"
 	historyTable  = "HISTORY"
@@ -30,29 +30,9 @@ SF_GET_PARA_VALUE(2, 'COMPATIBLE_MODE'), SF_GET_CASE_SENSITIVE_FLAG(),
 SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE') FROM DUAL`
 )
 
-type outputConverter struct{}
-
-func (outputConverter) ConvertValue(v any) (driver.Value, error) {
-	if _, ok := v.(sql.Out); ok {
-		return v, nil
-	}
-	return driver.DefaultParameterConverter.ConvertValue(v)
-}
-
-type outputCode int
-
-func (code outputCode) Match(v driver.Value) bool {
-	out, ok := v.(sql.Out)
-	if !ok {
-		return false
-	}
-	reflect.ValueOf(out.Dest).Elem().SetInt(int64(code))
-	return true
-}
-
 func mockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	t.Helper()
-	db, mock, err := sqlmock.New(sqlmock.ValueConverterOption(outputConverter{}))
+	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,11 +52,13 @@ func expectMetadata(mock sqlmock.Sqlmock, mode, caseSensitive, backslash int) {
 }
 
 func expectLock(mock sqlmock.Sqlmock, code int) {
-	mock.ExpectExec(`BEGIN \? := DBMS_LOCK.REQUEST\(\?, 6, 0, FALSE\); END;`).WithArgs(outputCode(code), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`^SELECT DBMS_LOCK.REQUEST\(\?, 6, 0, FALSE\) FROM DUAL$`).WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{codeColumn}).AddRow(code)).RowsWillBeClosed()
 }
 
 func expectUnlock(mock sqlmock.Sqlmock, code int) {
-	mock.ExpectExec(`BEGIN \? := DBMS_LOCK.RELEASE\(\?\); END;`).WithArgs(outputCode(code), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`^SELECT DBMS_LOCK.RELEASE\(\?\) FROM DUAL$`).WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{codeColumn}).AddRow(code)).RowsWillBeClosed()
 }
 
 func versionColumns() *sqlmock.Rows {
@@ -219,7 +201,7 @@ func TestInitializationRejectsNonnumericVersionColumns(t *testing.T) {
 func TestLockReturnCodesAndFailedUnlock(t *testing.T) {
 	d, mock := initializedDriver(t)
 	d.config.StatementTimeout = 10 * time.Millisecond
-	for _, code := range []int{1, 2, 3, 4, 5} {
+	for _, code := range []int{1, 2, 3, 4, 5, -1, 99} {
 		expectLock(mock, code)
 		err := d.Lock()
 		if err == nil || (code == 1 && !errors.Is(err, database.ErrLocked)) || (code != 1 && errors.Is(err, database.ErrLocked)) {

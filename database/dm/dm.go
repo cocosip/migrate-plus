@@ -199,7 +199,10 @@ func (d *Dm) lock(parent context.Context) error {
 		defer ticker.Stop()
 		for {
 			code := -1
-			if err := d.execContext(ctx, `BEGIN ? := DBMS_LOCK.REQUEST(?, 6, 0, FALSE); END;`, sql.Out{Dest: &code}, d.lockID); err != nil {
+			// Mixed OUT/IN binds in an anonymous block break some DM8 sessions.
+			query := `SELECT DBMS_LOCK.REQUEST(?, 6, 0, FALSE) FROM DUAL`
+			err := d.conn.QueryRowContext(ctx, query, d.lockID).Scan(&code)
+			if err := d.operationError(ctx, query, err); err != nil {
 				return err
 			}
 			if code == 0 {
@@ -226,8 +229,15 @@ func (d *Dm) Unlock() error {
 
 func (d *Dm) unlock() error {
 	return database.CasRestoreOnErr(&d.isLocked, true, false, database.ErrNotLocked, func() error {
+		if err := d.usable(); err != nil {
+			return err
+		}
+		ctx, cancel := d.operationContext()
+		defer cancel()
 		code := -1
-		if err := d.exec(`BEGIN ? := DBMS_LOCK.RELEASE(?); END;`, sql.Out{Dest: &code}, d.lockID); err != nil {
+		query := `SELECT DBMS_LOCK.RELEASE(?) FROM DUAL`
+		err := d.conn.QueryRowContext(ctx, query, d.lockID).Scan(&code)
+		if err := d.operationError(ctx, query, err); err != nil {
 			return err
 		}
 		if code != 0 {
@@ -433,17 +443,13 @@ func (d *Dm) operationError(ctx context.Context, query string, err error) error 
 	return database.Error{OrigErr: err, Err: "dm operation failed", Query: []byte(query)}
 }
 
-func (d *Dm) exec(query string, args ...any) error {
+func (d *Dm) exec(query string) error {
 	ctx, cancel := d.operationContext()
 	defer cancel()
-	return d.execContext(ctx, query, args...)
-}
-
-func (d *Dm) execContext(ctx context.Context, query string, args ...any) error {
 	if err := d.usable(); err != nil {
 		return err
 	}
-	_, err := d.conn.ExecContext(ctx, query, args...)
+	_, err := d.conn.ExecContext(ctx, query)
 	return d.operationError(ctx, query, err)
 }
 

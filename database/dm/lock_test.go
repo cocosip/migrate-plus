@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	dmclient "gitee.com/chunanyong/dm"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
@@ -58,8 +61,8 @@ func (started startedLockArgument) Match(driver.Value) bool {
 func TestCloseCancelsInFlightLockRequest(t *testing.T) {
 	d, mock := initializedDriver(t)
 	started := make(startedLockArgument)
-	mock.ExpectExec(`BEGIN \? := DBMS_LOCK.REQUEST`).WithArgs(started, sqlmock.AnyArg()).
-		WillDelayFor(5 * time.Second).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`SELECT DBMS_LOCK.REQUEST`).WithArgs(started).
+		WillDelayFor(5 * time.Second).WillReturnRows(sqlmock.NewRows([]string{codeColumn}).AddRow(0))
 	mock.ExpectClose()
 	result := make(chan error, 1)
 	go func() { result <- d.Lock() }()
@@ -80,5 +83,94 @@ func TestCloseCancelsInFlightLockRequest(t *testing.T) {
 	}
 	if err := <-result; err == nil {
 		t.Fatal("cancelled lock request succeeded")
+	}
+}
+
+func TestLockQueryFailureNeverAcquiresOrReplacesSession(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		rows  *sqlmock.Rows
+		err   error
+		fatal bool
+	}{
+		{"empty", sqlmock.NewRows([]string{codeColumn}), nil, false},
+		{"null", sqlmock.NewRows([]string{codeColumn}).AddRow(nil), nil, false},
+		{"invalid", sqlmock.NewRows([]string{codeColumn}).AddRow("invalid"), nil, false},
+		{"close", sqlmock.NewRows([]string{codeColumn}).AddRow(0).CloseError(errors.New("close failed")), nil, false},
+		{"permission", nil, errors.New("permission denied"), false},
+		{"disconnected", nil, &dmclient.DmError{ErrCode: 6001}, true},
+		{"bad connection", nil, driver.ErrBadConn, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, mock := initializedDriver(t)
+			request := mock.ExpectQuery(`^SELECT DBMS_LOCK.REQUEST\(\?, 6, 0, FALSE\) FROM DUAL$`).WithArgs(d.lockID)
+			if tc.err != nil {
+				request.WillReturnError(tc.err)
+			} else {
+				request.WillReturnRows(tc.rows).RowsWillBeClosed()
+			}
+			if tc.fatal {
+				mock.ExpectClose()
+			}
+			if err := d.Lock(); err == nil || d.isLocked.Load() {
+				t.Fatalf("failed request acquired lock: %v", err)
+			}
+			if tc.fatal {
+				if err := d.Lock(); !errors.Is(err, sql.ErrConnDone) {
+					t.Fatalf("replaced lost session: %v", err)
+				}
+				return
+			}
+			expectLock(mock, 0)
+			if err := d.Lock(); err != nil {
+				t.Fatal(err)
+			}
+			expectUnlock(mock, 0)
+			mock.ExpectClose()
+		})
+	}
+}
+
+func TestUnlockQueryFailurePreservesStateAndDiscardsLostSession(t *testing.T) {
+	for _, tc := range []struct {
+		err   error
+		fatal bool
+	}{{errors.New("release denied"), false}, {&dmclient.DmError{ErrCode: 6001}, true}} {
+		t.Run(fmt.Sprint(tc.err), func(t *testing.T) {
+			d, mock := initializedDriver(t)
+			expectLock(mock, 0)
+			if err := d.Lock(); err != nil {
+				t.Fatal(err)
+			}
+			mock.ExpectQuery(`^SELECT DBMS_LOCK.RELEASE\(\?\) FROM DUAL$`).WithArgs(d.lockID).WillReturnError(tc.err)
+			if tc.fatal {
+				mock.ExpectClose()
+			}
+			if err := d.Unlock(); err == nil || !d.isLocked.Load() {
+				t.Fatalf("failed release lost lock state: %v", err)
+			}
+			if !tc.fatal {
+				expectUnlock(mock, 0)
+				if err := d.Unlock(); err != nil {
+					t.Fatal(err)
+				}
+				mock.ExpectClose()
+			} else if err := d.Lock(); !errors.Is(err, sql.ErrConnDone) {
+				t.Fatalf("replaced lost session: %v", err)
+			}
+		})
+	}
+}
+
+func TestInitializationLockDisconnectStopsBeforeVersionTable(t *testing.T) {
+	db, mock := mockDB(t)
+	expectMetadata(mock, 2, 1, 0)
+	failure := &dmclient.DmError{ErrCode: 6001}
+	mock.ExpectQuery(`SELECT DBMS_LOCK.REQUEST`).WithArgs(sqlmock.AnyArg()).WillReturnError(failure)
+	mock.ExpectClose()
+	_, err := WithInstance(db, nil)
+	var operation database.Error
+	if !errors.As(err, &operation) || operation.OrigErr != failure {
+		t.Fatalf("initialization lost first lock error: %v", err)
 	}
 }

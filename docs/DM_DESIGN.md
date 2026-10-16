@@ -1,6 +1,8 @@
 # DM Driver Design
 
-Status: implementation added, 2026-10-15. No DM server verification exists yet.
+Status: updated 2026-10-16. DM8 8.1.4.80 Oracle-mode lock and migration lifecycle
+verified; native Drop has a separate failing integration test. See the
+[validation report](DM_LOCK_COMPATIBILITY.md) for exact scope and limits.
 This document extends [the project architecture](DESIGN.md). Connection examples,
 account setup and test commands belong to the [DM driver guide](../database/dm/README.md).
 
@@ -194,12 +196,18 @@ may be mutated to configure a single driver instance.
 Use DM's native `DBMS_LOCK` on the reserved session:
 
 ```sql
-BEGIN
-    ? := DBMS_LOCK.REQUEST(?, 6, 0, FALSE);
-END;
+SELECT DBMS_LOCK.REQUEST(?, 6, 0, FALSE) FROM DUAL;
+SELECT DBMS_LOCK.RELEASE(?) FROM DUAL;
 ```
 
-Bind the result with `sql.Out`. Positional arguments avoid Oracle-specific
+Read each result with `QueryRowContext().Scan()` and bind only the lock ID.
+On DM8 8.1.4.80 in Oracle compatibility mode with client v1.8.23, the former
+anonymous block mixing an OUT result and an IN lock ID prepares successfully
+but fails during execution with error 6001/EOF. SELECT with an IN lock ID works
+on a fresh session under the same parameters. See the
+[reproduction and validation report](DM_LOCK_COMPATIBILITY.md); this is not a
+claim that every anonymous block or every DM8 build has the same defect.
+Positional arguments avoid Oracle-specific
 parameter names: DM documents `LOCK_ID` and `LOCK_MODE`, whereas the Oracle
 driver uses `id` and `lockmode`. Derive a numeric lock ID through upstream
 `GenerateAdvisoryLockId` from schema ID and normalized table name, mask to

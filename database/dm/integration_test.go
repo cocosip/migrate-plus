@@ -10,6 +10,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	dmclient "gitee.com/chunanyong/dm"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 	databasetesting "github.com/golang-migrate/migrate/v4/database/testing"
@@ -27,6 +28,8 @@ func TestIntegration(t *testing.T) {
 	t.Run("session lock survives transactions and DDL", func(t *testing.T) { integrationSessionLock(t, raw) })
 	t.Run("DML remains durable after SetVersion commit and rollback", func(t *testing.T) { integrationDurability(t, raw) })
 	t.Run("upstream dirty force and down", func(t *testing.T) { integrationDirtyRecovery(t, raw) })
+	t.Run("up and repeated up", func(t *testing.T) { integrationRepeatedUp(t, raw) })
+	t.Run("closed native session is not replaced", func(t *testing.T) { integrationLostSession(t, raw) })
 	t.Run("timeout terminates locked session", func(t *testing.T) { integrationTimeout(t, raw) })
 	t.Run("cross schema dependency prevents destructive Drop", func(t *testing.T) { integrationCrossSchema(t, raw) })
 }
@@ -95,6 +98,18 @@ func integrationSessionLock(t *testing.T, raw string) {
 	}
 	mustExec(t, first, "CREATE TABLE migrate_plus_ddl_probe(id BIGINT)")
 	assertLocked(t, second)
+	if err := first.Unlock(); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Lock(); err != nil {
+		t.Fatalf("explicit release retained lock: %v", err)
+	}
+	if err := second.Unlock(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Lock(); err != nil {
+		t.Fatal(err)
+	}
 	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -214,6 +229,63 @@ func integrationTimeout(t *testing.T, raw string) {
 	}
 }
 
+func integrationRepeatedUp(t *testing.T, raw string) {
+	d := openTestDriver(t, raw)
+	source, err := iofs.New(fstest.MapFS{
+		"1_probe.up.sql": &fstest.MapFile{Data: []byte("CREATE TABLE migrate_plus_up_probe(id BIGINT);")},
+	}, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := migrate.NewWithInstance("iofs", source, "dm", d)
+	if err != nil {
+		_ = source.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
+			t.Errorf("close: %v, %v", srcErr, dbErr)
+		}
+	})
+	if err := m.Up(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Up(); !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatalf("repeated Up = %v", err)
+	}
+	if version, dirty, err := d.Version(); err != nil || version != 1 || dirty {
+		t.Fatalf("after Up: version=%d dirty=%v err=%v", version, dirty, err)
+	}
+	mustExec(t, d, "DROP TABLE migrate_plus_up_probe RESTRICT")
+	if err := d.SetVersion(database.NilVersion, false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func integrationLostSession(t *testing.T, raw string) {
+	first, second := openTestDriver(t, raw), openTestDriver(t, raw)
+	if err := first.Lock(); err != nil {
+		t.Fatal(err)
+	}
+	// Close below database/sql to simulate losing the driver's reserved session.
+	if err := first.conn.Raw(func(raw any) error { return raw.(*dmclient.DmConnection).Close() }); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := first.Version(); err == nil {
+		t.Fatal("continued on closed native session")
+	}
+	if err := first.Lock(); !errors.Is(err, sql.ErrConnDone) {
+		t.Fatalf("replaced lost migration session: %v", err)
+	}
+	second.config.StatementTimeout = 5 * time.Second
+	if err := second.Lock(); err != nil {
+		t.Fatalf("closed session retained lock: %v", err)
+	}
+	if err := second.Unlock(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func integrationCrossSchema(t *testing.T, raw string) {
 	otherURL := os.Getenv("MIGRATE_PLUS_DM_OTHER_TEST_URL")
 	if otherURL == "" {
@@ -271,7 +343,9 @@ func assertLocked(t *testing.T, d *Dm) {
 	t.Helper()
 	// Probe contention without timing out and invalidating the contender session.
 	code := -1
-	err := d.exec(`BEGIN ? := DBMS_LOCK.REQUEST(?, 6, 0, FALSE); END;`, sql.Out{Dest: &code}, d.lockID)
+	ctx, cancel := d.operationContext()
+	defer cancel()
+	err := d.conn.QueryRowContext(ctx, `SELECT DBMS_LOCK.REQUEST(?, 6, 0, FALSE) FROM DUAL`, d.lockID).Scan(&code)
 	if err != nil || code != 1 {
 		t.Fatalf("native lock contention = %d, %v", code, err)
 	}
