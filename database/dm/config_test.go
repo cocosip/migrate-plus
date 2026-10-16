@@ -27,6 +27,21 @@ func TestCapabilitiesUseDMServerModeAndProductIdentity(t *testing.T) {
 	if _, err := capabilitiesFor([]string{testProduct}, 0, 2, 0); err == nil {
 		t.Fatal("accepted unknown case behavior")
 	}
+	if _, err := capabilitiesFor([]string{testProduct}, 2, 1, 2); err == nil {
+		t.Fatal("accepted unknown backslash behavior")
+	}
+}
+
+func TestURLPreservesClientCompatibilityWithoutMappingServerMode(t *testing.T) {
+	for _, mode := range []string{"0", "1", "2", "oracle", "mysql"} {
+		dsn, _, err := parseURL("dm://u:p@host/APP?compatibleMode=" + mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(dsn, "dm://u:p@host/APP?compatibleMode="+mode+"&") {
+			t.Fatalf("client compatibility option was changed: %q", dsn)
+		}
+	}
 }
 
 func TestConfigDefaultsValidationAndCopy(t *testing.T) {

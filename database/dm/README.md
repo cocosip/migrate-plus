@@ -14,6 +14,14 @@ from `V$VERSION` and reads the actual schema, case sensitivity and effective
 initialization. No DM server build has been verified yet; unit tests and
 cross-builds do not certify native SQL or database behavior.
 
+`BACKSLASH_ESCAPE` is a static INI parameter. Initialization reads its active
+memory value with `SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE')`, not the on-disk
+value or `SF_GET_SESSION_PARA_VALUE` (which can fail with error -842 because
+the parameter is not session-scoped). On native connections this value must
+match `DmConnection.BackSlashFlag`, received in the server login response.
+A query failure, non-boolean value or disagreement stops initialization;
+neither compatibility mode nor a default value substitutes for this check.
+
 | Server `COMPATIBLE_MODE` | Target | Real-server verification |
 |---|---|---|
 | 0 | Native DM | Not run |
@@ -54,6 +62,17 @@ and query schemas, duplicate options and unknown `x-*` parameters are rejected.
 Do not log connection URLs. Actual special-character credential connections
 still require real-server verification.
 
+| Native DSN option | Meaning |
+|---|---|
+| `schema=APP` or `/APP` | Requests the initial schema; the driver still queries its actual identity for the migration table and lock |
+| `compatibleMode=0/1/2` or `oracle/mysql` | Client behavior only: 0 default, 1 Oracle, 2 MySQL; passed through unchanged, not the server's `COMPATIBLE_MODE` |
+| `escapeProcess=false` | Disables client SQL escape rewriting; distinct from the server's `BACKSLASH_ESCAPE` |
+
+This client release has no DSN option for `BACKSLASH_ESCAPE` or database case
+sensitivity. DSN values cannot replace these server facts. `WithInstance`
+receives an already-open pool rather than a DSN, so the same initialization
+checks apply to both entry points.
+
 | Migration option | Default | Accepted values |
 |---|---|---|
 | `x-migrations-table` | `schema_migrations` | ASCII identifier, up to 128 bytes; normalized uppercase |
@@ -79,7 +98,7 @@ session. One reserved session holds metadata operations, SQL and the lock.
 The migration account needs access to `V$VERSION`, `SYS.SYSOBJECTS`,
 `SYS.SYSCONS`, `SYS.SYSDEPENDENCIES`, and these native functions:
 `CURRENT_SCHID`, `SF_GET_SCHEMA_NAME_BY_ID`, `SF_GET_PARA_VALUE`,
-`SF_GET_CASE_SENSITIVE_FLAG`, `SF_GET_SESSION_PARA_VALUE`.
+`SF_GET_CASE_SENSITIVE_FLAG`.
 Grant the specific access needed on the deployed build, plus privileges and
 quota required by the scripts; the driver does not require a blanket DBA role.
 
@@ -109,9 +128,9 @@ already be committed; migrations are not promised atomic rollback.
 ## SQL scripts
 
 Ordinary SQL uses semicolons outside single/double quotes and comments. Doubled
-quote escaping is supported; backslash handling follows the effective session
-setting. Native procedural blocks and stored units (including CLASS/CLASS BODY) use a
-slash on its own line:
+quote escaping is supported; backslash handling follows the active
+`BACKSLASH_ESCAPE` value checked against the native connection. Native procedural
+blocks and stored units (including CLASS/CLASS BODY) use a slash on its own line:
 
 ```sql
 CREATE TABLE items(id BIGINT PRIMARY KEY);

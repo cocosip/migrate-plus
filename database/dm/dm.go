@@ -90,9 +90,10 @@ func (d *Dm) initialize() error {
 		return err
 	}
 	var mode, caseSensitive, backslash int
+	// BACKSLASH_ESCAPE is static; read the active memory value, not a session parameter or the INI file.
 	query := `SELECT CURRENT_SCHID(), SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID()),
 SF_GET_PARA_VALUE(2, 'COMPATIBLE_MODE'), SF_GET_CASE_SENSITIVE_FLAG(),
-SF_GET_SESSION_PARA_VALUE('BACKSLASH_ESCAPE') FROM DUAL`
+SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE') FROM DUAL`
 	if err := d.query(query, func(rows *sql.Rows) error {
 		if !rows.Next() {
 			return sql.ErrNoRows

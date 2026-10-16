@@ -76,14 +76,27 @@ During initialization, reserve one `*sql.Conn`, then obtain:
 | Server compatibility mode | `SF_GET_PARA_VALUE(2, 'COMPATIBLE_MODE')` | Read the active in-memory configuration |
 | Current schema identity | `CURRENT_SCHID()` and `SF_GET_SCHEMA_NAME_BY_ID(...)` | Canonical state-table namespace and lock identity |
 | Database identifier case behavior | `SF_GET_CASE_SENSITIVE_FLAG()` | Metadata lookup tests and collision handling |
-| Effective string escaping | Native session parameter lookup for `BACKSLASH_ESCAPE`, cross-checked with client `BackSlashFlag` | SQL statement framing |
+| Effective string escaping | `SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE')`, cross-checked with client `BackSlashFlag` | SQL statement framing |
 | DDL commit behavior | Client `DDLAutoCommit` snapshot and native parameter documentation | Transaction expectations and test selection |
 
-Use `SF_GET_SESSION_PARA_VALUE` for a setting documented as session-scoped on
-the particular build. Do not substitute the on-disk INI value for an active
-setting. Resolve any handshake/session disagreement before framing SQL; fail
+The DM8 parameter table classifies `BACKSLASH_ESCAPE` as static (0 off, 1 on).
+`SF_GET_SESSION_PARA_VALUE` only accepts session-scoped INI parameters; using it
+for this setting can fail initialization with error -842. Read scope 2 (memory),
+not scope 1 (the INI file, which may contain a pending restart change).
+In client v1.8.23, `BackSlashFlag` is assigned from a byte in the server login
+response (`zq.go`), and used when processing string literals (`m.go`, `zzk.go`).
+It is a connection-login snapshot, not derived from DSN `compatibleMode`.
+The DSN parser has no `BACKSLASH_ESCAPE` or case-sensitivity option; its `schema`
+option requests a schema but cannot provide the actual numeric schema identity.
+Keep these server checks for both URL opening and already-open pools.
+Resolve any memory/handshake disagreement before framing SQL; fail
 initialization if a required behavior cannot be determined. Permission errors
 must not silently choose an assumed mode or an Oracle fallback.
+
+These contracts are based on the published DM8 manual and the pinned client
+source; they are not a verified matrix of historical DM8 builds or modes.
+No server-version branch or exception-driven fallback is introduced. Verify
+the parameter contract and actual literal behavior on each deployed build.
 
 Distinguish the DM product build from database-format and message/protocol
 versions. Do not reject a DM8 server merely because a protocol version begins
@@ -397,6 +410,7 @@ server versions.
 - [DM SQL introduction](https://eco.dameng.com/docs/zh-cn/pm/dm_sql-introduction.html)
 - [DM SQL definitions and session settings](https://eco.dameng.com/docs/zh-cn/pm/definition-statement.html)
 - [DM system functions](https://eco.dameng.com/docs/zh-cn/pm/sql-appendix.html)
+- [DM INI parameters and static BACKSLASH_ESCAPE](https://eco.dameng.com/docs/zh-cn/pm/physical-storage.html)
 - [DM initialization and case settings](https://eco.dameng.com/docs/zh-cn/pm/dminit-parameters.html)
 - [DM dynamic views and mode examples](https://eco.dameng.com/docs/zh-cn/pm/dm8-admin-manual-appendix2.html)
 - [Upstream database extension interface](https://github.com/golang-migrate/migrate/blob/v4.20.1/database/driver.go)

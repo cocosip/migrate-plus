@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,9 @@ const (
 	versionColumn = "VERSION"
 	historyTable  = "HISTORY"
 	historyInput  = "history"
+	metadataQuery = `SELECT CURRENT_SCHID(), SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID()),
+SF_GET_PARA_VALUE(2, 'COMPATIBLE_MODE'), SF_GET_CASE_SENSITIVE_FLAG(),
+SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE') FROM DUAL`
 )
 
 type outputConverter struct{}
@@ -63,7 +67,7 @@ func mockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 
 func expectMetadata(mock sqlmock.Sqlmock, mode, caseSensitive, backslash int) {
 	mock.ExpectQuery(`SELECT BANNER FROM V\$VERSION`).WillReturnRows(sqlmock.NewRows([]string{"BANNER"}).AddRow(testProduct).AddRow("Msg Version: 7.6.0.99"))
-	mock.ExpectQuery(`SELECT CURRENT_SCHID\(\), SF_GET_SCHEMA_NAME_BY_ID`).WillReturnRows(
+	mock.ExpectQuery("^" + regexp.QuoteMeta(metadataQuery) + "$").WillReturnRows(
 		sqlmock.NewRows([]string{"id", "schema", "mode", "case", "escape"}).AddRow(101, testSchema, mode, caseSensitive, backslash))
 }
 
@@ -108,22 +112,49 @@ func initializedDriver(t *testing.T) (*Dm, sqlmock.Sqlmock) {
 }
 
 func TestWithInstanceUsesActualBackslashSetting(t *testing.T) {
+	for _, mode := range []int{0, 2, 4, 7} {
+		for _, backslash := range []int{0, 1} {
+			t.Run(fmt.Sprintf("mode=%d/backslash=%d", mode, backslash), func(t *testing.T) {
+				db, mock := mockDB(t)
+				expectMetadata(mock, mode, 1, backslash)
+				expectLock(mock, 0)
+				expectVersionTable(mock, true)
+				expectUnlock(mock, 0)
+				d, err := WithInstance(db, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				statement := `INSERT INTO probe VALUES('a\';b')`
+				if backslash == 0 {
+					statement = `INSERT INTO probe VALUES('c:\')`
+					if err := d.Run(strings.NewReader(`INSERT INTO probe VALUES('a\';b');`)); err == nil {
+						t.Fatal("accepted escaped quote with backslash escaping disabled")
+					}
+				}
+				mock.ExpectExec("^" + regexp.QuoteMeta(statement) + "$").WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`^DELETE FROM probe$`).WillReturnResult(sqlmock.NewResult(0, 1))
+				if err := d.Run(strings.NewReader(statement + "; DELETE FROM probe;")); err != nil {
+					t.Fatal(err)
+				}
+				mock.ExpectClose()
+				if err := d.Close(); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
+
+func TestInitializationPreservesParameterQueryErrors(t *testing.T) {
 	db, mock := mockDB(t)
-	expectMetadata(mock, 7, 1, 1)
-	expectLock(mock, 0)
-	expectVersionTable(mock, true)
-	expectUnlock(mock, 0)
-	d, err := WithInstance(db, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mock.ExpectExec(`INSERT INTO probe`).WillReturnResult(sqlmock.NewResult(0, 1))
-	if err := d.Run(strings.NewReader(`INSERT INTO probe VALUES('a\';b');`)); err != nil {
-		t.Fatal(err)
-	}
+	mock.ExpectQuery(`SELECT BANNER FROM V\$VERSION`).WillReturnRows(sqlmock.NewRows([]string{"BANNER"}).AddRow(testProduct))
+	failure := errors.New("parameter access denied")
+	mock.ExpectQuery("^" + regexp.QuoteMeta(metadataQuery) + "$").WillReturnError(failure)
 	mock.ExpectClose()
-	if err := d.Close(); err != nil {
-		t.Fatal(err)
+	_, err := WithInstance(db, nil)
+	var operation database.Error
+	if !errors.As(err, &operation) || operation.OrigErr != failure || string(operation.Query) != metadataQuery {
+		t.Fatalf("parameter query failure was lost: %v", err)
 	}
 }
 
