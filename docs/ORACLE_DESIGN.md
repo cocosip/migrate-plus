@@ -85,8 +85,9 @@ retries contention every 100 ms; its per-operation timeout bounds the whole
 attempt. Upstream `Migrate.LockTimeout` bounds the caller's wait without retrying
 or cancelling `Driver.Lock`. Call `Close` after a lock timeout; it cancels and
 waits for pending acquisition before releasing the session. Initialization
-precedes upstream's timeout and uses the configured statement timeout for lock
-acquisition. Local lock state uses upstream lock sentinels and
+uses `migrate.DefaultLockTimeout` (15 seconds), set by the CLI from `-lock-timeout`
+before construction, with a shorter statement timeout taking precedence.
+Library callers configure this default before construction. Local lock state uses upstream lock sentinels and
 `CasRestoreOnErr`; repeated `Lock` returns `ErrLocked`, and a failed release
 remains retryable on a live session.
 
@@ -106,6 +107,9 @@ Upstream drives `SetVersion(version, true)`, `Run`, then
 `SetVersion(version, false)`. Persist changes with transactional `DELETE` and
 optional `INSERT`; preserve dirty `NilVersion` and empty clean state. Never use
 `TRUNCATE` for state changes because Oracle DDL commits implicitly.
+Read all state rows and reject multiple rows, versions below -1, or dirty
+values other than 0/1. Validate existing history under the initialization lock
+as well as when upstream reads Version; never hide dirty rows with ROWNUM.
 Failed begin/commit/rollback operations discard the reserved session rather
 than risk continuing with uncertain transaction state. Execution timeouts also
 discard the session. Recovery requires a new driver and inspection of persisted
@@ -142,10 +146,12 @@ indexes/constraints/triggers, views, materialized views, sequences, synonyms,
 packages, procedures, functions and types. Drop materialized views before
 listing remaining objects so tables retained by `ON PREBUILT TABLE` are included.
 
-Use Oracle catalogs and native DROP clauses, including table
-`CASCADE CONSTRAINTS PURGE` and type `FORCE`. Quote catalog identifiers and
-qualify them with the original schema. These Oracle-specific clauses do not
-define the behavior of other drivers.
+Preflight visible external foreign keys and object dependencies before DDL.
+Remove only local foreign keys explicitly, use table `PURGE` without
+`CASCADE CONSTRAINTS`, and drop types in dependency order without `FORCE`.
+Reject type cycles before DDL. Native dependency checks remain necessary when
+catalog privileges hide external constraints. Quote catalog identifiers and
+qualify them with the original schema.
 
 Do not drop the Oracle user, database, grants, scheduler jobs or database links.
 Errors stop processing; earlier DDL may already have committed. Close and reopen

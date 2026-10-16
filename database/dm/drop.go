@@ -26,6 +26,9 @@ func (d *Dm) Drop() error {
 	if err := d.checkExternalDependencies(); err != nil {
 		return err
 	}
+	if err := d.checkDropOrder(); err != nil {
+		return err
+	}
 	if err := d.dropForeignKeys(); err != nil {
 		return err
 	}
@@ -55,6 +58,23 @@ func (d *Dm) Drop() error {
 		}
 	}
 	return nil
+}
+
+func (d *Dm) checkDropOrder() error {
+	var objects []dropObject
+	for _, materialized := range []int{1, 0} {
+		phase, err := d.dropObjects(materialized)
+		if err != nil {
+			return err
+		}
+		objects = append(objects, phase...)
+	}
+	dependencies, err := d.objectDependencies()
+	if err != nil {
+		return err
+	}
+	_, err = orderObjects(objects, dependencies)
+	return err
 }
 
 func (d *Dm) checkExternalDependencies() error {

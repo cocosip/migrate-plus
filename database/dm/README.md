@@ -92,8 +92,11 @@ retries contention every 100 ms. Locks survive commit, rollback and DDL.
 does not retry or cancel `Driver.Lock`. Always call `Close` after a lock timeout
 to cancel pending acquisition and release any acquired lock.
 `x-statement-timeout` bounds the whole driver lock attempt, including retries.
-It also bounds lock acquisition during initialization, before upstream's lock
-timeout takes effect. Repeated `Lock` calls on the same driver return
+Initialization additionally uses `migrate.DefaultLockTimeout` (15 seconds),
+which the CLI sets from `-lock-timeout` before opening the driver. A shorter
+statement timeout takes precedence. Library callers must set the default before
+construction; setting an instance's `LockTimeout` afterward cannot affect setup.
+Repeated `Lock` calls on the same driver return
 `database.ErrLocked`.
 
 Do not change the current schema, compatibility mode, escaping or routing
@@ -137,8 +140,10 @@ standalone triggers. Native table cleanup handles dependent indexes/triggers.
 Foreign keys in that schema are removed first; materialized views are removed
 before re-reading remaining objects to account for backing tables.
 
-External dependencies cause refusal before destructive DDL. Dependency cycles
-require explicit cleanup SQL. No `CASCADE`, Oracle `PURGE` or `FORCE` is used.
+External dependencies and cycles in the complete supported-object graph are
+checked before destructive DDL, including foreign-key removal. Unresolved
+object cycles require explicit cleanup SQL; local foreign-key cycles are removed
+by dropping their constraints. No `CASCADE`, Oracle `PURGE` or `FORCE` is used.
 Catalog/DDL errors stop processing; earlier DDL may have committed. Users,
 schemas, databases, grants, jobs, links and global system packages are excluded;
 this is not a general schema eraser. Close and reopen after Drop. Native catalog

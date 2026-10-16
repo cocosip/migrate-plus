@@ -81,6 +81,10 @@ func expectMetadata(mock sqlmock.Sqlmock, server, compatible string) {
 		WillReturnRows(sqlmock.NewRows([]string{"schema"}).AddRow("APP"))
 }
 
+func versionRows() *sqlmock.Rows { return sqlmock.NewRows([]string{"version", "dirty"}) }
+
+func typeDependencyRows() *sqlmock.Rows { return sqlmock.NewRows([]string{"name", "referenced"}) }
+
 func initializedDriver(t *testing.T) (*Oracle, sqlmock.Sqlmock) {
 	t.Helper()
 	db, mock := mockDB(t)
@@ -88,6 +92,7 @@ func initializedDriver(t *testing.T) (*Oracle, sqlmock.Sqlmock) {
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2`).
 		WithArgs("APP", "SCHEMA_MIGRATIONS").WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(versionRows())
 	expectUnlock(mock, 0)
 	d, err := WithInstance(db, nil)
 	if err != nil {
@@ -155,6 +160,7 @@ func TestWithInstanceDiscardsSessionWhenInitialUnlockFails(t *testing.T) {
 	expectMetadata(mock, "19.0.0.0.0", testVersion19)
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(versionRows())
 	expectUnlock(mock, 5)
 	mock.ExpectClose()
 	if _, err := WithInstance(db, nil); err == nil {
@@ -261,7 +267,7 @@ func TestSetVersionPreservesDirtyNilVersionAndRollsBackFailures(t *testing.T) {
 	if err := o.SetVersion(8, false); err == nil {
 		t.Fatal("insert failure was swallowed")
 	}
-	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(sqlmock.NewRows([]string{"version", "dirty"}).AddRow(7, 0))
+	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(versionRows().AddRow(7, 0))
 	if version, dirty, err := o.Version(); err != nil || version != 7 || dirty {
 		t.Fatalf("session unusable after successful rollback: %d, %v, %v", version, dirty, err)
 	}
@@ -272,17 +278,16 @@ func TestSetVersionPreservesDirtyNilVersionAndRollsBackFailures(t *testing.T) {
 
 func TestVersionReadsNumericDirtyAndNilState(t *testing.T) {
 	o, mock := initializedDriver(t)
-	columns := []string{"version", "dirty"}
 	for _, tc := range []struct {
 		rows    *sqlmock.Rows
 		version int
 		dirty   bool
 	}{
-		{sqlmock.NewRows(columns), -1, false},
-		{sqlmock.NewRows(columns).AddRow(-1, 1), -1, true},
-		{sqlmock.NewRows(columns).AddRow(7, 0), 7, false},
+		{versionRows(), -1, false},
+		{versionRows().AddRow(-1, 1), -1, true},
+		{versionRows().AddRow(7, 0), 7, false},
 	} {
-		mock.ExpectQuery(`SELECT version, dirty FROM "APP"\."SCHEMA_MIGRATIONS" WHERE ROWNUM = 1`).WillReturnRows(tc.rows)
+		mock.ExpectQuery(`SELECT version, dirty FROM "APP"\."SCHEMA_MIGRATIONS"$`).WillReturnRows(tc.rows)
 		version, dirty, err := o.Version()
 		if err != nil || version != tc.version || dirty != tc.dirty {
 			t.Fatalf("version = %d, %v, %v", version, dirty, err)
@@ -324,17 +329,26 @@ func TestRunBoundsStatementExecution(t *testing.T) {
 	}
 }
 
-func TestDropQuotesSchemaObjectsAndAppliesTypeSpecificSuffixes(t *testing.T) {
+func expectDropPreflight(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM`).WithArgs("APP", "APP", "APP", "APP").
+		WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
+	mock.ExpectQuery(`SELECT t.object_name, d.referenced_name FROM ALL_OBJECTS`).WithArgs("APP").
+		WillReturnRows(typeDependencyRows())
+	mock.ExpectQuery(`SELECT table_name, constraint_name FROM ALL_CONSTRAINTS`).WithArgs("APP").
+		WillReturnRows(sqlmock.NewRows([]string{"table", "constraint"}))
+}
+
+func TestDropQuotesSchemaObjectsWithoutCascading(t *testing.T) {
 	o, mock := initializedDriver(t)
+	expectDropPreflight(mock)
 	mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS`).WithArgs("APP", "APP").
 		WillReturnRows(sqlmock.NewRows([]string{objectTypeColumn, objectNameColumn}))
 	mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS`).WithArgs("APP", "APP").
 		WillReturnRows(sqlmock.NewRows([]string{objectTypeColumn, objectNameColumn}).
-			AddRow("VIEW", "v\"x").AddRow("TABLE", "T").AddRow("SEQUENCE", "S").AddRow("TYPE", "TY"))
+			AddRow("VIEW", "v\"x").AddRow("TABLE", "T").AddRow("SEQUENCE", "S"))
 	mock.ExpectExec(`DROP VIEW "APP"\."v""x"`).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(`DROP TABLE "APP"\."T" CASCADE CONSTRAINTS PURGE`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`DROP TABLE "APP"\."T" PURGE$`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DROP SEQUENCE "APP"\."S"`).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(`DROP TYPE "APP"\."TY" FORCE`).WillReturnResult(sqlmock.NewResult(0, 0))
 	if err := o.Drop(); err != nil {
 		t.Fatal(err)
 	}
@@ -344,6 +358,7 @@ func TestDropMaterializedViewsBeforeListingRemainingTables(t *testing.T) {
 	for _, prebuilt := range []bool{false, true} {
 		t.Run(fmt.Sprintf("prebuilt=%v", prebuilt), func(t *testing.T) {
 			o, mock := initializedDriver(t)
+			expectDropPreflight(mock)
 			mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS[\s\S]*object_type IN \('MATERIALIZED VIEW'\)`).
 				WithArgs("APP", "APP").
 				WillReturnRows(sqlmock.NewRows([]string{objectTypeColumn, objectNameColumn}).AddRow("MATERIALIZED VIEW", "CACHE"))
@@ -356,7 +371,7 @@ func TestDropMaterializedViewsBeforeListingRemainingTables(t *testing.T) {
 			mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS[\s\S]*object_type IN \('VIEW', 'TABLE',`).
 				WithArgs("APP", "APP").WillReturnRows(remaining)
 			if prebuilt {
-				mock.ExpectExec(`DROP TABLE "APP"\."CACHE" CASCADE CONSTRAINTS PURGE`).WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectExec(`DROP TABLE "APP"\."CACHE" PURGE$`).WillReturnResult(sqlmock.NewResult(0, 0))
 			}
 			if err := o.Drop(); err != nil {
 				t.Fatal(err)
@@ -369,6 +384,7 @@ func TestDropStopsOnMaterializedViewPhaseErrors(t *testing.T) {
 	for _, stage := range []string{"list views", "drop view", "list remaining objects"} {
 		t.Run(stage, func(t *testing.T) {
 			o, mock := initializedDriver(t)
+			expectDropPreflight(mock)
 			failure := errors.New("drop failed")
 			query := mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS`).WithArgs("APP", "APP")
 			if stage == "list views" {

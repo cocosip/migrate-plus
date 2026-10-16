@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 	go_ora "github.com/sijms/go-ora/v2"
 )
@@ -147,6 +148,10 @@ func (o *Oracle) Close() error {
 
 // Lock acquires a session lock that survives Oracle's implicit DDL commits.
 func (o *Oracle) Lock() error {
+	return o.lock(context.Background())
+}
+
+func (o *Oracle) lock(parent context.Context) error {
 	if !o.lockMu.TryLock() {
 		return database.ErrLocked
 	}
@@ -154,8 +159,13 @@ func (o *Oracle) Lock() error {
 	if err := o.usable(); err != nil {
 		return err
 	}
-	ctx, cancel := o.operationContext()
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	if o.config.StatementTimeout > 0 {
+		var stop context.CancelFunc
+		ctx, stop = context.WithTimeout(ctx, o.config.StatementTimeout)
+		defer stop()
+	}
 	stop := context.AfterFunc(o.lockCtx, cancel)
 	defer stop()
 	return database.CasRestoreOnErr(&o.isLocked, false, true, database.ErrLocked, func() error {
@@ -275,27 +285,40 @@ func (o *Oracle) SetVersion(version int, dirty bool) (err error) {
 	return nil
 }
 
-// Version returns NilVersion for an empty version table.
-func (o *Oracle) Version() (int, bool, error) {
+// Version returns NilVersion for empty state and rejects ambiguous/corrupt history.
+func (o *Oracle) Version() (version int, dirty bool, err error) {
 	if err := o.usable(); err != nil {
 		return 0, false, err
 	}
 	ctx, cancel := o.operationContext()
 	defer cancel()
-	var version, dirty int
-	query := `SELECT version, dirty FROM ` + o.versionTable() + ` WHERE ROWNUM = 1`
-	err := o.conn.QueryRowContext(ctx, query).Scan(&version, &dirty)
-	if errors.Is(err, sql.ErrNoRows) {
-		return database.NilVersion, false, nil
-	}
+	query := `SELECT version, dirty FROM ` + o.versionTable()
+	rows, err := o.conn.QueryContext(ctx, query)
 	if err != nil {
 		return 0, false, queryError(query, err)
 	}
-	return version, dirty != 0, nil
+	defer func() {
+		if err = errors.Join(err, rows.Close()); err != nil {
+			err = queryError(query, err)
+		}
+	}()
+	if !rows.Next() {
+		return database.NilVersion, false, rows.Err()
+	}
+	var dirtyValue int
+	if err := rows.Scan(&version, &dirtyValue); err != nil {
+		return 0, false, err
+	}
+	if version < database.NilVersion || (dirtyValue != 0 && dirtyValue != 1) || rows.Next() {
+		return 0, false, fmt.Errorf("oracle: corrupt or multiple migration state rows")
+	}
+	return version, dirtyValue == 1, rows.Err()
 }
 
 func (o *Oracle) ensureVersionTable() (err error) {
-	if err := o.Lock(); err != nil {
+	lockCtx, cancelLock := context.WithTimeout(context.Background(), migrate.DefaultLockTimeout)
+	defer cancelLock()
+	if err := o.lock(lockCtx); err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, o.Unlock()) }()
@@ -307,7 +330,8 @@ func (o *Oracle) ensureVersionTable() (err error) {
 		return queryError(query, err)
 	}
 	if count > 0 {
-		return nil
+		_, _, err = o.Version()
+		return err
 	}
 	return o.exec(`CREATE TABLE ` + o.versionTable() + ` (version NUMBER(19) NOT NULL PRIMARY KEY, dirty NUMBER(1) NOT NULL CHECK (dirty IN (0, 1)))`)
 }

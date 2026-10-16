@@ -146,6 +146,11 @@ Lock uses native session `pg_try_advisory_lock(bigint)` and
 survive commit/rollback/DDL. Upstream LockTimeout only limits the caller's wait;
 Close cancels pending acquisition. Use the driver timeout to bound acquisition
 itself. Initialization acquires the same lock around state-table setup.
+Its lock wait is additionally bounded by `migrate.DefaultLockTimeout` (15
+seconds); the CLI sets this from `-lock-timeout` before opening the driver.
+A shorter driver statement timeout takes precedence. Library callers must set
+the default before construction; changing an instance's `LockTimeout` afterward
+does not change initialization.
 
 The account needs CONNECT, schema USAGE/CREATE, access to native catalogs and
 settings, EXECUTE on the advisory functions, DML on the state table, and the

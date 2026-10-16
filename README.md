@@ -47,6 +47,11 @@ go run ./cmd/migrate-plus -path ./migrations -database 'oracle://user:password@l
 `-version` prints the binary build version. The `version` command queries a
 configured database's migration version.
 
+`goto V` accepts versions from 0 through the platform's signed integer maximum.
+`-lock-timeout N` also bounds the native drivers' initialization lock wait
+(default 15 seconds). Library callers can set `migrate.DefaultLockTimeout`
+before constructing drivers; a shorter driver statement timeout still applies.
+
 ## Library integration
 
 Consumers use the upstream library directly:

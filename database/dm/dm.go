@@ -15,6 +15,7 @@ import (
 	"time"
 
 	dmclient "gitee.com/chunanyong/dm"
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 )
 
@@ -172,6 +173,10 @@ func (d *Dm) Close() error {
 
 // Lock takes an exclusive session lock that survives commit, rollback and DDL.
 func (d *Dm) Lock() error {
+	return d.lock(context.Background())
+}
+
+func (d *Dm) lock(parent context.Context) error {
 	if !d.lockMu.TryLock() {
 		return database.ErrLocked
 	}
@@ -179,8 +184,13 @@ func (d *Dm) Lock() error {
 	if err := d.usable(); err != nil {
 		return err
 	}
-	ctx, cancel := d.operationContext()
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	if d.config.StatementTimeout > 0 {
+		var stop context.CancelFunc
+		ctx, stop = context.WithTimeout(ctx, d.config.StatementTimeout)
+		defer stop()
+	}
 	stop := context.AfterFunc(d.lockCtx, cancel)
 	defer stop()
 	return database.CasRestoreOnErr(&d.isLocked, false, true, database.ErrLocked, func() error {
@@ -311,7 +321,9 @@ func (d *Dm) Version() (version int, dirty bool, err error) {
 }
 
 func (d *Dm) ensureVersionTable() (err error) {
-	if err := d.Lock(); err != nil {
+	lockCtx, cancelLock := context.WithTimeout(context.Background(), migrate.DefaultLockTimeout)
+	defer cancelLock()
+	if err := d.lock(lockCtx); err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, d.Unlock()) }()

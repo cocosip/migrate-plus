@@ -24,6 +24,22 @@ func TestIntegration(t *testing.T) {
 		d := openTestDriver(t, raw)
 		databasetesting.Test(t, d, []byte("CREATE TABLE migrate_plus_probe (id NUMBER);"))
 	})
+	t.Run("drop orders dependent types and cyclic local foreign keys", func(t *testing.T) {
+		d := openTestDriver(t, raw)
+		if err := d.Run(strings.NewReader(`CREATE TYPE migrate_plus_base AS OBJECT (id NUMBER);
+/
+CREATE TYPE migrate_plus_child_type AS OBJECT (item migrate_plus_base);
+/
+CREATE TABLE migrate_plus_parent(id NUMBER PRIMARY KEY, child_id NUMBER, item migrate_plus_child_type);
+CREATE TABLE migrate_plus_child(id NUMBER PRIMARY KEY, parent_id NUMBER REFERENCES migrate_plus_parent(id));
+ALTER TABLE migrate_plus_parent ADD CONSTRAINT migrate_plus_reverse_fk FOREIGN KEY(child_id) REFERENCES migrate_plus_child(id);`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.Drop(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("cross schema foreign key survives rejected Drop", func(t *testing.T) { integrationCrossSchema(t, raw) })
 	t.Run("drop removes ordinary and prebuilt materialized view tables", func(t *testing.T) {
 		d := openTestDriver(t, raw)
 		if err := d.Run(strings.NewReader(`CREATE TABLE migrate_plus_source (id NUMBER);
@@ -127,6 +143,45 @@ INSERT INTO migrate_plus_items VALUES (migrate_plus_seq.NEXTVAL);`)},
 			t.Fatal(err)
 		}
 	})
+}
+
+func integrationCrossSchema(t *testing.T, raw string) {
+	otherURL := os.Getenv("MIGRATE_PLUS_ORACLE_OTHER_TEST_URL")
+	if otherURL == "" {
+		t.Skip("set MIGRATE_PLUS_ORACLE_OTHER_TEST_URL to another disposable schema on the same server")
+	}
+	first, other := openTestDriver(t, raw).(*Oracle), openTestDriver(t, otherURL).(*Oracle)
+	if first.schema == other.schema {
+		t.Fatal("cross-schema test requires two distinct schemas")
+	}
+	if err := first.exec(`CREATE TABLE migrate_plus_external (id NUMBER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = first.exec(`DROP TABLE migrate_plus_external PURGE`) })
+	if err := first.exec(`GRANT REFERENCES ON migrate_plus_external TO ` + quoteIdentifier(other.schema)); err != nil {
+		t.Fatal(err)
+	}
+	if err := other.exec(`CREATE TABLE migrate_plus_external_child (parent_id NUMBER,
+CONSTRAINT migrate_plus_external_fk FOREIGN KEY (parent_id) REFERENCES ` + quoteIdentifier(first.schema) + `.migrate_plus_external(id))`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = other.exec(`DROP TABLE migrate_plus_external_child PURGE`) })
+	if err := first.Drop(); err == nil {
+		t.Fatal("Drop accepted another schema's foreign key")
+	}
+	ctx, cancel := other.operationContext()
+	defer cancel()
+	var status string
+	if err := other.conn.QueryRowContext(ctx, `SELECT status FROM ALL_CONSTRAINTS
+WHERE owner = :1 AND constraint_name = 'MIGRATE_PLUS_EXTERNAL_FK'`, other.schema).Scan(&status); err != nil || status != "ENABLED" {
+		t.Fatalf("Drop changed the external foreign key: status=%q err=%v", status, err)
+	}
+	if err := other.exec(`DROP TABLE migrate_plus_external_child PURGE`); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Drop(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assertLocked(t *testing.T, o *Oracle) {

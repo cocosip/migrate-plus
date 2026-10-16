@@ -33,9 +33,10 @@ func TestIntegration(t *testing.T) {
 
 func integrationDrop(t *testing.T, raw string) {
 	d := openTestDriver(t, raw)
-	mustExec(t, d, `CREATE TABLE migrate_plus_parent(id BIGINT PRIMARY KEY);
+	mustExec(t, d, `CREATE TABLE migrate_plus_parent(id BIGINT PRIMARY KEY, child_id BIGINT);
 CREATE TABLE migrate_plus_child(id BIGINT PRIMARY KEY, parent_id BIGINT,
 CONSTRAINT migrate_plus_fk FOREIGN KEY(parent_id) REFERENCES migrate_plus_parent(id));
+ALTER TABLE migrate_plus_parent ADD CONSTRAINT migrate_plus_reverse_fk FOREIGN KEY(child_id) REFERENCES migrate_plus_child(id);
 CREATE VIEW migrate_plus_view AS SELECT id FROM migrate_plus_parent;
 CREATE SEQUENCE migrate_plus_drop_seq;
 CREATE SYNONYM migrate_plus_syn FOR migrate_plus_parent;

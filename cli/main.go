@@ -131,6 +131,12 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 	// initialize migrate
 	// don't catch migraterErr here and let each command decide
 	// how it wants to handle the error
+	if uint64(*lockTimeoutPtr) > uint64(math.MaxInt64/int64(time.Second)) {
+		log.fatal("error: lock timeout exceeds time.Duration range")
+	}
+	lockTimeout := time.Duration(*lockTimeoutPtr) * time.Second
+	// Native drivers also need this limit while initializing their version table.
+	migrate.DefaultLockTimeout = lockTimeout
 	migrater, migraterErr := migrate.New(*sourcePtr, *databasePtr)
 	defer func() {
 		if migraterErr == nil {
@@ -142,7 +148,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 	if migraterErr == nil {
 		migrater.Log = log
 		migrater.PrefetchMigrations = *prefetchPtr
-		migrater.LockTimeout = time.Duration(int64(*lockTimeoutPtr)) * time.Second
+		migrater.LockTimeout = lockTimeout
 
 		// handle Ctrl+c
 		signals := make(chan os.Signal, 1)
@@ -220,7 +226,7 @@ Database drivers: `+strings.Join(database.List(), ", ")+"\n", createUsage, gotoU
 		}
 
 		v, err := strconv.ParseUint(gotoSet.Arg(0), 10, 64)
-		if err != nil || v > math.MaxUint {
+		if err != nil || v > math.MaxInt {
 			log.fatal("error: can't read version argument V")
 		}
 

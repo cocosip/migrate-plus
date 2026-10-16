@@ -17,6 +17,7 @@ import (
 	gaussdbgo "github.com/HuaweiCloudDeveloper/gaussdb-go"
 	"github.com/HuaweiCloudDeveloper/gaussdb-go/gaussdbconn"
 	"github.com/HuaweiCloudDeveloper/gaussdb-go/stdlib"
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 )
 
@@ -208,6 +209,10 @@ func (g *GaussDB) Close() error {
 
 // Lock retries a native exclusive session lock until acquisition, timeout or Close.
 func (g *GaussDB) Lock() error {
+	return g.lock(context.Background())
+}
+
+func (g *GaussDB) lock(parent context.Context) error {
 	if !g.lockMu.TryLock() {
 		return database.ErrLocked
 	}
@@ -215,8 +220,13 @@ func (g *GaussDB) Lock() error {
 	if err := g.requireIdle(); err != nil {
 		return err
 	}
-	ctx, cancel := g.operationContext()
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	if g.config.StatementTimeout > 0 {
+		var stop context.CancelFunc
+		ctx, stop = context.WithTimeout(ctx, g.config.StatementTimeout)
+		defer stop()
+	}
 	stop := context.AfterFunc(g.lockCtx, cancel)
 	defer stop()
 	return database.CasRestoreOnErr(&g.isLocked, false, true, database.ErrLocked, func() error {
@@ -388,7 +398,9 @@ func (g *GaussDB) Version() (version int, dirty bool, err error) {
 }
 
 func (g *GaussDB) ensureVersionTable() (err error) {
-	if err := g.Lock(); err != nil {
+	lockCtx, cancelLock := context.WithTimeout(context.Background(), migrate.DefaultLockTimeout)
+	defer cancelLock()
+	if err := g.lock(lockCtx); err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, g.Unlock()) }()

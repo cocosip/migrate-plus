@@ -211,7 +211,10 @@ and validation, then releases it before returning the driver.
 Match DM/Oracle timeout semantics: upstream `Migrate.LockTimeout` bounds the
 caller's wait but does not cancel `Driver.Lock`; `Close` cancels and waits for
 pending acquisition and releases any acquired lock. The driver's configured
-timeout bounds the whole attempt, including during initialization. Cleanup
+timeout bounds the whole attempt, including during initialization. Initialization
+additionally uses `migrate.DefaultLockTimeout` (15 seconds), set by the CLI from
+`-lock-timeout` before driver construction; the shorter timeout wins. Library
+callers configure this default before construction. Cleanup
 must preserve both operation and release errors.
 
 **Distributed acceptance is a separate requirement.** Test competing sessions

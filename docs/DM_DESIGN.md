@@ -198,8 +198,10 @@ every 100 ms until acquisition, the configured statement timeout, or `Close`.
 The statement timeout bounds the whole lock attempt, including initialization.
 Upstream `Migrate.LockTimeout` bounds the caller's wait without retrying or
 cancelling `Driver.Lock`. Call `Close` after a lock timeout; it cancels and waits
-for pending acquisition before releasing the session. Initialization precedes
-upstream's timeout. Other return values are errors with the native code. In
+for pending acquisition before releasing the session. Initialization also uses
+`migrate.DefaultLockTimeout` (15 seconds), which the CLI sets from `-lock-timeout`
+before opening the driver; a shorter statement timeout takes precedence.
+Library callers configure this default before construction. Other return values are errors with the native code. In
 particular, do not reuse Oracle's interpretation of result 4: DM's published table describes it
 as not owning the lock. Local repeated Lock/Unlock calls use upstream lock
 sentinels; a failed native release must not clear local locked state.
@@ -323,7 +325,10 @@ documentation and tests. Handle dependent objects and materialized view backing
 tables in phases; re-query after each phase so prebuilt containers are not
 missed. Confirm supported cascade clauses do not delete objects in other
 schemas; otherwise fail with a dependency error rather than crossing the schema
-boundary. Stop and report errors; no generic catch-and-ignore path.
+boundary. Validate the complete supported-object dependency graph before any
+DDL, including local foreign-key removal, so a known cycle leaves constraints
+intact. Still re-query after materialized views to handle removed backing tables.
+Stop and report errors; no generic catch-and-ignore path.
 
 Do not drop users, schemas, the database, grants, jobs, database links or global
 system packages. Do not silently claim complete schema removal for unsupported

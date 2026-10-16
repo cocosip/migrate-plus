@@ -130,6 +130,10 @@ applied, while upstream migrate retains the dirty version. Repair the schema
 before using upstream `force` to record the intended version. The driver does
 not silently retry migration SQL after a failure.
 
+Empty history reports version -1. Initialization and version reads reject
+multiple state rows, versions below -1, and dirty values other than 0/1; repair
+corrupt history explicitly before reopening the driver.
+
 An execution timeout or a failed version-transaction commit/rollback discards
 the session. Construct a new migrator and inspect the persisted schema and dirty
 state before continuing; a failed commit may already have reached the server.
@@ -142,8 +146,11 @@ The driver retries contention every 100 ms. `Migrate.LockTimeout` (CLI
 `-lock-timeout`) bounds the caller's wait; upstream does not retry or cancel
 `Driver.Lock`. Always call `Close` after a lock timeout to cancel pending
 acquisition and release any acquired lock. `x-statement-timeout` bounds the
-whole driver lock attempt, including retries. It also bounds lock acquisition
-during initialization, before upstream's lock timeout takes effect. Repeated
+whole driver lock attempt, including retries. Initialization additionally uses
+`migrate.DefaultLockTimeout` (15 seconds); the CLI sets it from `-lock-timeout`
+before opening the driver. A shorter statement timeout takes precedence. Library
+callers must configure the default before construction, rather than changing
+an instance's `LockTimeout` afterward. Repeated
 `Lock` calls on the same driver return `database.ErrLocked`.
 
 Closing the driver releases the lock and closes the session. Lock IDs are
@@ -156,6 +163,12 @@ sequences, synonyms, packages, procedures, functions, and types. Materialized vi
 are dropped before listing remaining tables, including tables retained by
 `ON PREBUILT TABLE` views. It does not
 remove the database, Oracle user, grants, scheduler jobs, or database links.
+Before DDL it checks visible external dependencies and type cycles, then removes
+only this schema's foreign keys. Types are dropped in dependency order.
+Table drops use `PURGE` without `CASCADE CONSTRAINTS`; types never use `FORCE`,
+so native dependency checks protect external constraints even when catalog
+visibility is incomplete. Catalog visibility depends on the migration account;
+preflight cannot discover every external dependent under restricted privileges.
 Close and reopen the driver after dropping. Oracle DDL cannot roll back a
 partially failed drop.
 
@@ -167,7 +180,11 @@ or wire-protocol compatibility.
 
 The integration suite calls upstream `database/testing.Test`, exercises
 independent-session locking through DDL and close, and checks upstream
-up/dirty/force/down behavior with SQL and PL/SQL migrations. **It destroys the
+up/dirty/force/down behavior with SQL and PL/SQL migrations. Local foreign-key
+cycles and dependent types are included. Set `MIGRATE_PLUS_ORACLE_OTHER_TEST_URL`
+to a second disposable schema on the same server to check that an external
+foreign key survives a refused Drop; both accounts need table-creation rights,
+and the parent account must be able to grant REFERENCES. **It destroys the
 schema's supported objects. Use an empty, disposable, dedicated test schema.**
 
 ```powershell
