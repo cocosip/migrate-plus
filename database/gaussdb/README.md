@@ -10,8 +10,9 @@ by this repository yet. See the [design and evidence](../../docs/GAUSSDB_DESIGN.
 The initial implementation accepts native A and PG compatibility modes and a
 writable UTF8 client session without distributed coordinators. It rejects other modes and
 coordinator topologies because their SQL framing and cluster-wide lock scope
-have not been established. GaussDB(for MySQL), PostgreSQL and openGauss are
-not additional supported products.
+have not been established. GaussDB(for MySQL) and PostgreSQL are not additional
+supported products. openGauss is served by the separate
+[openGauss driver](../opengauss/README.md).
 
 ## URL and CLI
 

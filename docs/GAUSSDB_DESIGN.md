@@ -39,8 +39,9 @@ The following are design defaults, not additional user requirements:
 - Make small capability branches only for demonstrated server differences.
   No common database base class, dialect translator or migration engine.
 
-GaussDB(for MySQL), PostgreSQL and openGauss are not additional support claims.
-The client repository's use of openGauss in CI does not certify Huawei GaussDB
+GaussDB(for MySQL) and PostgreSQL are not additional support claims. openGauss
+is covered by the separate [openGauss driver](OPENGAUSS_DESIGN.md). The client
+repository's use of openGauss in CI does not certify Huawei GaussDB
 server versions or distributed deployments for this project.
 
 ## 2. Dependency findings and version policy
@@ -374,7 +375,7 @@ Implementation reaches the following locations:
 |---|---|
 | `database/gaussdb/` | `config.go`, `gaussdb.go`, limited `sql.go` preflight, `drop.go`, corresponding unit tests, lock tests, opt-in integration tests and README |
 | `go.mod`, `go.sum` | Pinned Huawei client and reviewed transitive dependencies |
-| `cmd/migrate-plus/main.go` and tests | Blank import; registry/help checks for all three drivers |
+| `cmd/migrate-plus/main.go` and tests | Blank import; registry/help checks for the compiled drivers |
 | `README.md`, `docs/DESIGN.md` | Implemented scope, package layout and usage links; preserve the distinction from verified server support |
 | `THIRD_PARTY_NOTICES.md` / release packaging | Client provenance and MIT notice |
 | Existing CI/release jobs | Reuse unit/lint/module/race/six-target builds; no default database installation |
@@ -405,7 +406,8 @@ Record exact Huawei GaussDB build, compatibility mode, deployment/coordinator
 topology, client revision, session settings and results. Exercise older and
 recent available releases before claiming compatibility across release
 families. Treat different-coordinator locking and failover as separate cases;
-openGauss tests and SQL mocks do not replace Huawei GaussDB results. The present
+openGauss results belong to the separate [openGauss driver](OPENGAUSS_DESIGN.md)
+and do not replace Huawei GaussDB results. The present
 matrix has no verified entries.
 
 Implementation validation follows the existing repository checks:

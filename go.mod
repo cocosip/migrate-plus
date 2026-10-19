@@ -3,6 +3,7 @@ module github.com/cocosip/migrate-plus
 go 1.26.0
 
 require (
+	gitcode.com/opengauss/openGauss-connector-go-pq v1.0.9
 	gitee.com/chunanyong/dm v1.8.23
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/HuaweiCloudDeveloper/gaussdb-go v1.0.0-rc1
@@ -19,4 +20,5 @@ require (
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 )

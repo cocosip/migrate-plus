@@ -23,6 +23,12 @@ func TestGaussDBIsCompiledIntoCLI(t *testing.T) {
 	}
 }
 
+func TestOpenGaussIsCompiledIntoCLI(t *testing.T) {
+	if !slices.Contains(database.List(), "opengauss") {
+		t.Fatal("CLI does not include the openGauss driver")
+	}
+}
+
 func TestComposedCLIProcess(_ *testing.T) {
 	if os.Getenv("MIGRATE_PLUS_COMPOSED_CLI_TEST") != "1" {
 		return
@@ -43,7 +49,7 @@ func TestComposedHelpListsDrivers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v\n%s", err, output)
 	}
-	for _, name := range []string{"dm", "oracle", "gaussdb"} {
+	for _, name := range []string{"dm", "oracle", "gaussdb", "opengauss"} {
 		if !strings.Contains(string(output), name) {
 			t.Errorf("help missing %s: %s", name, output)
 		}

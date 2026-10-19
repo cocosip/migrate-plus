@@ -39,5 +39,6 @@ Thumbs.db
 # Claude Code configuration (optional - keep if needed)
 .claude/
 .cache/
+.zcode/
 docs/superpowers/
 .superpowers/
