@@ -116,7 +116,8 @@ SQL files must contain valid UTF8. The limited lexical preflight uses the sessio
 actual compatibility, `standard_conforming_strings` and `client_encoding` settings,
 refreshed before each nonempty file; non-UTF8 client encodings are rejected.
 It recognizes nested comments, quoted identifiers, ordinary/escape/dollar
-strings and A-mode alternative quotes. It is not a complete SQL validator.
+strings (including escape-string continuation across newlines and line comments)
+and A-mode alternative quotes. It is not a complete SQL validator.
 Configure lexical settings before migration; scripts must not change their
 meaning while a file is being parsed. Avoid changing authentication, routing,
 database or lock ownership, including `DISCARD ALL` and advisory-unlock calls.

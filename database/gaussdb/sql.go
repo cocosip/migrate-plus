@@ -124,10 +124,41 @@ func quoteEnd(s string, start int, escaped bool) (int, string, error) {
 				i++
 				continue
 			}
+			if escaped {
+				if next := continuedQuote(s, i+1); next >= 0 {
+					i = next
+					continue
+				}
+			}
 			return i + 1, "", nil
 		}
 	}
 	return 0, "", fmt.Errorf("gaussdb: unterminated SQL quote")
+}
+
+// continuedQuote reports the offset of the opening quote when an escape string continues
+// after whitespace containing a newline, optionally holding a line comment.
+func continuedQuote(s string, start int) int {
+	newline := false
+	for i := start; i < len(s); {
+		switch {
+		case strings.ContainsRune(" \t\r\n\f\v", rune(s[i])):
+			newline = newline || s[i] == '\r' || s[i] == '\n'
+			i++
+		case strings.HasPrefix(s[i:], "--"):
+			end := strings.IndexAny(s[i:], "\r\n")
+			if end < 0 {
+				return -1
+			}
+			i += end
+		default:
+			if newline && s[i] == '\'' {
+				return i
+			}
+			return -1
+		}
+	}
+	return -1
 }
 
 func alternativeQuoteEnd(s string, start int) (int, string, error) {
