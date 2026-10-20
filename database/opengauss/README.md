@@ -90,7 +90,10 @@ Use upstream `migrate.NewWithDatabaseInstance` with the returned driver, or
 the native client's credential-bearing parse errors to untrusted users.
 
 `WithInstance` accepts any `*sql.DB` whose connections speak the openGauss wire
-protocol, including pools built from multi-host DSNs. It reserves one physical
+protocol, including pools built from multi-host DSNs. Connection-class failures
+(SQLSTATE class `08`) are recognized from any such client through its
+`SQLState()` method; FATAL/PANIC severity is recognized from the official
+client only. It reserves one physical
 connection and copies Config (nil selects defaults). Success transfers ownership
 of the pool: driver Close closes the session and pool. Failed construction
 discards its reserved connection but leaves the caller-owned pool open. Config
@@ -131,11 +134,13 @@ table. User changes to `search_path` do not move the state table. The client
 exposes no transaction-status API. After successful execution, Run probes with
 `SAVEPOINT`: success means the file left a transaction open, while SQLSTATE
 `25P01` means no transaction is active. Other probe errors fail the migration.
-Run then issues `ROLLBACK`, clearing any open or aborted transaction. Cleanup
-has a fresh five-second timeout. Unfinished transactions return an error and
+When the session is not confirmed idle — a failed script, an open transaction
+or an uncertain probe — Run issues `ROLLBACK`, clearing any open or aborted
+transaction; a confirmed idle session needs no rollback. Cleanup has a fresh
+five-second timeout. Unfinished transactions return an error and
 upstream retains dirty state; their uncommitted rows never commit. Explicit
 `BEGIN ... COMMIT` pairs remain supported. Idle probes can log an expected
-`25P01` error, and idle ROLLBACK can log a notice. A failed cleanup discards the
+`25P01` error. A failed cleanup discards the
 physical session. Failed connections, operation timeout, or uncertain
 commit/rollback also discard the physical session. Continuing requires a new
 driver; there is no reconnect or SQL replay.

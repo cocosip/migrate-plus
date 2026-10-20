@@ -317,22 +317,30 @@ func (g *OpenGauss) Run(migration io.Reader) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	confirmedIdle := false
 	if execErr == nil {
 		// SAVEPOINT succeeds only inside a transaction; SQLSTATE 25P01 means the session is idle.
 		_, probeErr := g.conn.ExecContext(ctx, transactionProbeSQL)
 		var native interface{ SQLState() string }
-		if probeErr == nil {
+		switch {
+		case probeErr == nil:
 			execErr = fmt.Errorf("opengauss: migration left an open transaction")
-		} else if !errors.As(probeErr, &native) || native.SQLState() != "25P01" {
+		case errors.As(probeErr, &native) && native.SQLState() == "25P01":
+			confirmedIdle = true
+		default:
 			execErr = g.operationError(ctx, transactionProbeSQL, probeErr)
 			if g.broken.Load() {
 				return execErr
 			}
 		}
 	}
-	if _, rollbackErr := g.conn.ExecContext(ctx, rollbackSQL); rollbackErr != nil {
-		g.discard()
-		return errors.Join(execErr, g.operationError(ctx, rollbackSQL, rollbackErr))
+	// A failed script, an open transaction or an uncertain probe leaves the transaction
+	// state unknown; only a confirmed idle session needs no rollback.
+	if !confirmedIdle {
+		if _, rollbackErr := g.conn.ExecContext(ctx, rollbackSQL); rollbackErr != nil {
+			g.discard()
+			return errors.Join(execErr, g.operationError(ctx, rollbackSQL, rollbackErr))
+		}
 	}
 	return execErr
 }
@@ -493,12 +501,16 @@ func (g *OpenGauss) operationError(ctx context.Context, query string, err error)
 		return nil
 	}
 	var native *opq.Error
+	var stater interface{ SQLState() string }
 	var network net.Error
 	fatal := errors.Is(err, sqldriver.ErrBadConn) || errors.Is(err, sql.ErrConnDone) ||
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &network)
 	if errors.As(err, &native) {
 		fatal = fatal || strings.HasPrefix(native.SQLState(), "08") || native.Severity == "FATAL" || native.Severity == "PANIC"
+	} else if errors.As(err, &stater) {
+		// Wire-compatible pools from other clients expose connection failures via SQLState.
+		fatal = fatal || strings.HasPrefix(stater.SQLState(), "08")
 	}
 	if fatal {
 		g.discard()

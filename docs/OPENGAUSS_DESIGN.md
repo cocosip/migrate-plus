@@ -144,7 +144,10 @@ then closes the underlying client connection. After a discard, every method
 fails with `sql.ErrConnDone` until the caller constructs a new driver. Errors
 classified as fatal are: transport errors (`ErrBadConn`, `ErrConnDone`, EOF,
 net.Error), context cancellation/deadline, and native `*opq.Error` with SQLSTATE
-class `08` or FATAL/PANIC severity. Server-level errors are wrapped in upstream
+class `08` or FATAL/PANIC severity. SQLSTATE class `08` errors from
+wire-compatible client pools are matched through the `SQLState() string`
+interface, so foreign pools keep connection-failure classification; only the
+official client contributes severity. Server-level errors are wrapped in upstream
 `database.Error` with the offending query.
 
 ## 6. Version state and migration execution
@@ -164,12 +167,14 @@ preflight, then executes the file as one native simple query. Unlike the
 GaussDB driver, this client exposes no server transaction-status API on the
 reserved session. After successful execution, Run probes with `SAVEPOINT`:
 success means the script left a transaction open; SQLSTATE `25P01` means the
-session is idle. Other probe errors fail the migration. Run then issues a
-defensive `ROLLBACK` to clear open or aborted transactions, with a five-second
-timeout covering the probe and rollback. Unfinished transactions return an
+session is idle. Other probe errors fail the migration. When the session is not
+confirmed idle — a failed script, an open transaction or an uncertain probe —
+Run issues a defensive `ROLLBACK` to clear open or aborted transactions, with a
+five-second timeout covering the probe and rollback; a confirmed idle session
+skips the rollback. Unfinished transactions return an
 error so upstream retains dirty state. A failed ROLLBACK discards the session.
-Idle probes can log an expected `25P01` error and idle ROLLBACK can log a
-notice. Explicit `BEGIN ... COMMIT` pairs remain valid SQL and commit normally.
+Idle probes can log an expected `25P01` error. Explicit
+`BEGIN ... COMMIT` pairs remain valid SQL and commit normally.
 
 Do not assume atomic DDL across modes/builds. Earlier statements may already
 have committed when a file fails. Repair actual database state before upstream

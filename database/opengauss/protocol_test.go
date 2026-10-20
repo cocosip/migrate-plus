@@ -27,11 +27,15 @@ func TestNativeTransactionCleanup(t *testing.T) {
 	} {
 		t.Run(string(tc.status), func(t *testing.T) {
 			g, rollbacks := nativeRunDriver(t, tc.status)
+			wantRollbacks := int32(0)
+			if tc.status != 'I' {
+				wantRollbacks = 1
+			}
 			err := g.Run(strings.NewReader(tc.script))
-			if (err != nil) != (tc.status != 'I') || g.broken.Load() || rollbacks.Load() != 1 {
+			if (err != nil) != (tc.status != 'I') || g.broken.Load() || rollbacks.Load() != wantRollbacks {
 				t.Fatalf("Run = %v, broken=%v, rollbacks=%d", err, g.broken.Load(), rollbacks.Load())
 			}
-			if err := g.Run(strings.NewReader("SELECT 2;")); err != nil || rollbacks.Load() != 2 {
+			if err := g.Run(strings.NewReader("SELECT 2;")); err != nil || rollbacks.Load() != wantRollbacks {
 				t.Fatalf("Run after cleanup = %v, rollbacks=%d", err, rollbacks.Load())
 			}
 		})

@@ -285,7 +285,6 @@ func TestRunUsesWholeScriptAndClearsLeftoverTransactions(t *testing.T) {
 	script := "CREATE TABLE t(id int); INSERT INTO t VALUES (1);"
 	expectRun(mock, regexp.QuoteMeta(script)).WillReturnResult(sqlmock.NewResult(0, 1))
 	expectIdleProbe(mock)
-	expectRollback(mock)
 	if err := g.Run(strings.NewReader(script)); err != nil {
 		t.Fatal(err)
 	}
@@ -318,6 +317,35 @@ func TestRunUsesWholeScriptAndClearsLeftoverTransactions(t *testing.T) {
 type failingReader struct{}
 
 func (failingReader) Read([]byte) (int, error) { return 0, errors.New("reader failed") }
+
+type foreignStateError struct{ code string }
+
+func (e foreignStateError) Error() string    { return "foreign wire error" }
+func (e foreignStateError) SQLState() string { return e.code }
+
+func TestForeignDriverErrorClassification(t *testing.T) {
+	for _, tc := range []struct {
+		code  string
+		fatal bool
+	}{{"08006", true}, {"57P01", false}} {
+		t.Run(tc.code, func(t *testing.T) {
+			g, mock := initializedDriver(t)
+			expectRun(mock, `SELECT 1`).WillReturnError(foreignStateError{code: tc.code})
+			if tc.fatal {
+				mock.ExpectClose()
+			} else {
+				expectRollback(mock)
+			}
+			err := g.Run(strings.NewReader("SELECT 1"))
+			if err == nil {
+				t.Fatal("foreign error ignored")
+			}
+			if g.broken.Load() != tc.fatal {
+				t.Fatalf("code %s broken=%v", tc.code, g.broken.Load())
+			}
+		})
+	}
+}
 
 func TestLostSessionAndTimeoutCannotContinue(t *testing.T) {
 	for _, failure := range []error{driver.ErrBadConn, context.DeadlineExceeded} {

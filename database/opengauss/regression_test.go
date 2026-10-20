@@ -78,7 +78,6 @@ func TestRunAcceptsCommittedTransactions(t *testing.T) {
 	script := committedScript
 	expectRun(mock, regexp.QuoteMeta(script)).WillReturnResult(sqlmock.NewResult(0, 0))
 	expectIdleProbe(mock)
-	expectRollback(mock)
 	if err := g.Run(strings.NewReader(script)); err != nil {
 		t.Fatal(err)
 	}

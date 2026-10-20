@@ -136,6 +136,8 @@ func quoteEnd(s string, start int, escaped bool) (int, string, error) {
 	return 0, "", fmt.Errorf("opengauss: unterminated SQL quote")
 }
 
+// continuedQuote reports the offset of the opening quote when an escape string continues
+// after whitespace containing a newline, optionally holding a line comment.
 func continuedQuote(s string, start int) int {
 	newline := false
 	for i := start; i < len(s); {
