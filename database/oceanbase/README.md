@@ -1,9 +1,9 @@
 # OceanBase migration driver
 
 **Status: implementation checkpoint, not release-ready.** The library foundation
-and offline tests are implemented. The distributed CLI does not import this
-driver yet. Native protocol tests and disposable-schema integration tests are
-next-phase work; neither compatibility mode has real-server validation here.
+and offline tests are implemented. The distributed CLI imports this driver.
+Opt-in disposable-schema integration tests exist but have not been run; neither
+compatibility mode has real-server validation here.
 See [development handoff](../../docs/OCEANBASE_PROGRESS.md).
 
 The package implements upstream `database.Driver` using
@@ -59,12 +59,14 @@ the lock. Unsupported locks, missing privileges, wrong return values and lost
 ownership fail initialization. There is no process-lock or transaction-lock
 fallback. Acquisition errors with uncertain ownership discard the session.
 
-**Oracle compatibility is conditional.** Official OceanBase V4.3.5 REQUEST
-documentation says `release_on_commit` can only be `TRUE`, while its example
-passes `FALSE`. Servers that implement only transaction-scoped locks are
-deliberately rejected. This checkpoint has no live evidence resolving that
-version-specific limitation. MySQL native locks also depend on server and
-OBProxy capabilities. See the linked evidence in the design document.
+**Oracle compatibility is conditional.** The English V4.3.5/V4.4.2 REQUEST pages
+say `release_on_commit` supports only `TRUE`; that is a machine-translation
+error. The Chinese originals (all versions) and English V5.0.1 state that `TRUE`
+and `FALSE` are supported, default `FALSE`, and the examples pass `FALSE`.
+Oracle mode is documented as Enterprise Edition only. Servers that implement
+only transaction-scoped locks are still rejected by the startup probe, and
+actual behavior remains unverified live. MySQL native locks also depend on
+server and OBProxy capabilities. See the linked evidence in the design document.
 
 Initialization lock waits use `migrate.DefaultLockTimeout`; a configured statement
 timeout can impose an earlier bound. Existing CLI `-lock-timeout` will apply once
@@ -80,9 +82,14 @@ and comments keep embedded semicolons opaque. MySQL preflight observes
 `NO_BACKSLASH_ESCAPES` and `ANSI_QUOTES`.
 
 SQL is executed in its original dialect. Preflight rejects visible session and
-transaction commands, all `SET` statements, client commands such as `DELIMITER`
-and `SOURCE`, executable comments, inline Oracle WITH routines, and malformed literals/comments. Consequently
-some routine bodies using `SET` are outside this checkpoint's script subset.
+transaction commands, top-level `SET` statements, client commands such as
+`DELIMITER` and `SOURCE`, executable comments, inline Oracle WITH routines, and
+malformed literals/comments. Inside procedure, function, trigger and anonymous
+block bodies only transaction control (`COMMIT`, `ROLLBACK`, `SAVEPOINT`, MySQL
+`START`/`XA`) and MySQL `SET` of session/system variables (`@@`, `SESSION`,
+`GLOBAL`, `NAMES`, `AUTOCOMMIT`, `SQL_MODE`, ...) are rejected; local-variable
+`SET`, loops and `EXIT` are allowed. MySQL routine bodies are delimited by
+`BEGIN`/`CASE` ... `END` nesting without `DELIMITER`.
 Do not embed schema/identity changes, transaction control or lock operations in
 procedures called by migrations. Preflight is not an SQL sandbox and does not
 interpret dynamic SQL or routine side effects. The driver checks schema and
@@ -127,8 +134,9 @@ case sensitivity and dependency visibility remain unverified against real server
 ## Validation boundary
 
 Default tests use sqlmock and pure framing/configuration tests. They do not
-establish native wire compatibility or real OceanBase behavior. No OceanBase
-integration test entrypoint exists at this checkpoint. The next stage must add
-separate explicit disposable MySQL/Oracle test targets, upstream conformance,
-cross-session lock survival across DDL, dirty recovery, existing-history and Drop
-tests. Never run destructive tests against production `GOIMAGE`.
+establish native wire compatibility or real OceanBase behavior. Opt-in integration tests
+(`TestIntegrationMySQL`, `TestIntegrationOracle`) cover upstream conformance,
+lock contention, dirty recovery, timeout discard, history reopen and Drop. They
+run only when `MIGRATE_PLUS_OCEANBASE_MYSQL_TEST_URL` or
+`MIGRATE_PLUS_OCEANBASE_ORACLE_TEST_URL` names a disposable schema and destroy its
+objects. They have not been executed against a real server. Never run destructive tests against production `GOIMAGE`.

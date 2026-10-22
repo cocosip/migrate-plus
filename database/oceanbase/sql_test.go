@@ -57,3 +57,51 @@ func TestRejectUnverifiedInlineOracleRoutine(t *testing.T) {
 		t.Fatal("accepted unsupported inline routine framing")
 	}
 }
+
+func TestProceduralBodiesAreNotCheckedAsTopLevelStatements(t *testing.T) {
+	accepted := map[ob.Mode][]string{
+		ob.ModeOracle: {
+			"BEGIN\n LOOP\n x := x + 1;\n EXIT WHEN x > 3;\n END LOOP;\nEND;\n/\n",
+			"BEGIN\n LOOP\n EXIT;\n END LOOP;\nEND;\n/\n",
+			"CREATE PROCEDURE p AS\nBEGIN\n x := 1;\n IF x = 1 THEN\n NULL;\n END IF;\nEND;\n/\n",
+		},
+		ob.ModeMySQL: {
+			"CREATE PROCEDURE p() BEGIN DECLARE a INT; SET a = 1; SELECT a; END;",
+			"CREATE DEFINER=root@localhost PROCEDURE p() BEGIN SET @v = 1; SELECT CASE WHEN @v = 1 THEN 1 END; END; SELECT 1;",
+			"CREATE PROCEDURE p(x INT) BEGIN CASE x WHEN 1 THEN SELECT 1; ELSE SELECT 2; END CASE; WHILE x < 3 DO SET x = x + 1; END WHILE; END;",
+			"CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.id = 1; SELECT 1;",
+		},
+	}
+	for mode, scripts := range accepted {
+		for _, script := range scripts {
+			if _, err := splitStatements(script, mode, ""); err != nil {
+				t.Errorf("mode %v rejected %q: %v", mode, script, err)
+			}
+		}
+	}
+}
+
+func TestProceduralBodiesRejectTransactionAndSystemCommands(t *testing.T) {
+	rejected := map[ob.Mode][]string{
+		ob.ModeOracle: {
+			"BEGIN COMMIT; END;\n/\n",
+			"BEGIN\n x := 1;\n COMMIT;\nEND;\n/\n",
+			"BEGIN\n IF x = 1 THEN ROLLBACK; END IF;\nEND;\n/\n",
+			"CREATE PROCEDURE p AS BEGIN SAVEPOINT s; END;\n/\n",
+		},
+		ob.ModeMySQL: {
+			"CREATE PROCEDURE p() BEGIN COMMIT; END;",
+			"CREATE PROCEDURE p() BEGIN SELECT 1; START TRANSACTION; END;",
+			"CREATE PROCEDURE p() BEGIN SELECT 1; SET autocommit = 0; END;",
+			"CREATE PROCEDURE p() BEGIN SELECT 1; SET @@session.sql_mode = ''; END;",
+			"CREATE PROCEDURE p() BEGIN SELECT 1; END; USE other;",
+		},
+	}
+	for mode, scripts := range rejected {
+		for _, script := range scripts {
+			if _, err := splitStatements(script, mode, ""); err == nil {
+				t.Errorf("mode %v accepted %q", mode, script)
+			}
+		}
+	}
+}

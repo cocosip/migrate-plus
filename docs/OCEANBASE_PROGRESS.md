@@ -57,12 +57,15 @@ this checkpoint's executed checks.
 3. A physical connection cannot be replaced after acquiring a migration lock.
    Network failures and uncertain commits terminate this driver instance.
 4. Oracle requires `DBMS_LOCK.REQUEST(..., FALSE)` to survive DDL commits.
-   Official V4.3.5 docs contradict their own FALSE example. Startup probes
-   reject transaction-scoped behavior; no real supported Oracle version has
-   been established. Do not change to TRUE merely to get a successful call.
+   The English V4.3.5/V4.4.2 REQUEST pages ("only TRUE") are a machine-translation
+   error: the Chinese originals of every version, and English V5.0.1, say both
+   TRUE and FALSE are supported with default FALSE (see OCEANBASE_DESIGN.md).
+   Startup probes still reject transaction-scoped behavior; real server
+   behavior is unverified. Do not change to TRUE merely to get a successful call.
 5. Existing version/dirty history is never automatically reset or rebuilt.
 6. Preflight rejects session/transaction/client commands, executable comments,
-   inline Oracle WITH routines and all SET statements. It is not an SQL sandbox
+   inline Oracle WITH routines and top-level SET statements; inside routine bodies
+   only transaction control and system-level SET are rejected. It is not an SQL sandbox
    for dynamic routine SQL.
 7. Drop rejects Oracle materialized views until backing-object behavior is
    implemented, and rejects MySQL events and other unknown object types.
@@ -79,7 +82,8 @@ this checkpoint's executed checks.
    metadata requests, Oracle OUT binds, transaction-state restoration, negotiated
    multi-statements, cancellation and physical-session loss. Current sqlmock
    tests do not prove these wire-level paths.
-3. Add separate opt-in test entrypoints and environment variables for explicitly
+3. Opt-in entrypoints exist (`TestIntegrationMySQL/Oracle`, env
+   `MIGRATE_PLUS_OCEANBASE_{MYSQL,ORACLE}_TEST_URL`) but have never been run. Run them against explicitly
    disposable MySQL/Oracle schemas. First reproduce the native lock operations,
    cross-session contention and commit/rollback/DDL survival on both targets.
    Record real server version, mode, direct/proxy path and package privileges.
@@ -92,8 +96,7 @@ this checkpoint's executed checks.
    needs it and the matching regression/integration evidence exists. Validate
    inline WITH routines and materialized-view backing tables before claiming
    support; neither has dedicated acceptance coverage at this checkpoint.
-6. Add the blank import to `cmd/migrate-plus/main.go`; extend driver-registration
-   and CLI-help tests. Currently the shipped CLI still contains four drivers.
+6. Done: the CLI imports the driver and registration/help tests cover it.
 7. Update root architecture/status/release text when delivery scope changes,
    then run all completion checks and the existing pure-Go cross-platform CI
    requirements. Commit locally; push only if explicitly requested.

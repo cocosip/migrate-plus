@@ -108,7 +108,7 @@ func (d *OceanBase) unlock() error {
 func (d *OceanBase) verifyLockSurvival() error {
 	ctx, cancel := d.operationContext()
 	defer cancel()
-	for _, command := range []string{"COMMIT", "ROLLBACK"} {
+	for _, command := range []string{keywordCommit, keywordRollback} {
 		if err := d.execContext(ctx, command); err != nil {
 			return err
 		}

@@ -49,7 +49,7 @@ func TestComposedHelpListsDrivers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v\n%s", err, output)
 	}
-	for _, name := range []string{"dm", "oracle", "gaussdb", "opengauss"} {
+	for _, name := range []string{"dm", "oracle", "gaussdb", "opengauss", "oceanbase"} {
 		if !strings.Contains(string(output), name) {
 			t.Errorf("help missing %s: %s", name, output)
 		}
@@ -63,4 +63,10 @@ func TestOracleIsCompiledIntoCLI(t *testing.T) {
 		}
 	}
 	t.Fatal("CLI does not include the Oracle driver")
+}
+
+func TestOceanBaseIsCompiledIntoCLI(t *testing.T) {
+	if !slices.Contains(database.List(), "oceanbase") {
+		t.Fatal("CLI does not include the OceanBase driver")
+	}
 }

@@ -42,11 +42,11 @@ has been verified yet. See the [openGauss driver guide](database/opengauss/READM
 for connection strings, SQL restrictions and tests.
 
 Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
-The distributed CLI includes Oracle, DM, GaussDB, openGauss and the upstream file source.
+The distributed CLI includes Oracle, DM, GaussDB, openGauss, OceanBase and the upstream file source.
 
 An OceanBase MySQL/Oracle library foundation is available in `database/oceanbase`
 using `github.com/cocosip/go-oceanbase v0.1.1`. It is an implementation checkpoint,
-is not included in the distributed CLI, and has no native-protocol or real-server
+is included in the distributed CLI, and has no native-protocol or real-server
 acceptance yet. See the [development handoff](docs/OCEANBASE_PROGRESS.md) and
 [driver constraints](database/oceanbase/README.md) before continuing or using it.
 
@@ -111,7 +111,7 @@ database/oracle/       Native Oracle driver, unit tests, and opt-in integration 
 database/dm/           Native DM8 driver, unit tests, and opt-in integration tests
 database/gaussdb/      Native GaussDB driver, unit and opt-in integration tests
 database/opengauss/    Native openGauss driver, unit and opt-in integration tests
-cmd/migrate-plus/      Thin executable entrypoint importing all four drivers
+cmd/migrate-plus/      Thin executable entrypoint importing all five drivers
 docs/                  Architecture and design
 .github/workflows/     CI, CodeQL, and tag-based CLI releases
 LICENSE                Project MIT license

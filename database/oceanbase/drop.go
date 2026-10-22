@@ -108,7 +108,7 @@ AND object_name NOT LIKE 'BIN$%' ORDER BY DECODE(object_type, 'TRIGGER', 0, 'MAT
 				return err
 			}
 			switch object.kind {
-			case "TABLE", "VIEW", objectProcedure, objectFunction, "TRIGGER":
+			case "TABLE", "VIEW", objectProcedure, objectFunction, objectTrigger:
 			case "SEQUENCE", "SYNONYM", "PACKAGE", "TYPE":
 				if d.mode != ob.ModeOracle {
 					return fmt.Errorf("oceanbase: unsupported MySQL Drop object %q", object.kind)

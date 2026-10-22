@@ -61,13 +61,26 @@ Official evidence inspected during implementation:
 
 - [OceanBase V4.3.5 DBMS_LOCK overview](https://github.com/oceanbase/oceanbase-doc/blob/V4.3.5/en-US/700.reference/600.pl-reference/300.pl-oracle/1400.pl-system-package-oracle/9400.dbms-lock-oracle/100.dbms-lock-overview-oracle.md)
 - [REQUEST restrictions and return values](https://github.com/oceanbase/oceanbase-doc/blob/V4.3.5/en-US/700.reference/600.pl-reference/300.pl-oracle/1400.pl-system-package-oracle/9400.dbms-lock-oracle/150.request-of-oracle-mode.md)
+- [REQUEST, Chinese original](https://github.com/oceanbase/oceanbase-doc/blob/V4.4.2/zh-CN/700.reference/600.pl-reference/300.pl-oracle/1400.pl-system-package-oracle/9400.dbms-lock-oracle/150.request-of-oracle-mode.md)
+  and [English V5.0.1](https://github.com/oceanbase/oceanbase-doc/blob/V5.0.1/en-US/700.reference/600.pl-reference/300.pl-oracle/1400.pl-system-package-oracle/9400.dbms-lock-oracle/150.request-of-oracle-mode.md)
 - [RELEASE return values](https://github.com/oceanbase/oceanbase-doc/blob/V4.3.5/en-US/700.reference/600.pl-reference/300.pl-oracle/1400.pl-system-package-oracle/9400.dbms-lock-oracle/210.release-oracle.md)
 - [OceanBase native MySQL lock implementation](https://github.com/oceanbase/oceanbase/blob/master/src/sql/engine/expr/ob_expr_lock_func.cpp)
 
-The Oracle REQUEST document restricts `release_on_commit` to `TRUE` while its
-example passes `FALSE`. Transaction-scoped locks cannot protect DDL migrations.
-The implementation therefore requires `FALSE` and verifies actual behavior at
-initialization; incompatible versions fail before creating history. MySQL lock
+The sources are the OceanBase documentation repository (`oceanbase/oceanbase-doc`),
+not go-oceanbase, which contains no DBMS_LOCK code. The English V4.3.5 and V4.4.2
+REQUEST pages (marked `machine-translation: en`) say `release_on_commit` "can only
+be set to TRUE" while their own example passes `FALSE`. The Chinese originals of
+those versions say the parameter supports `TRUE` and `FALSE`, default `FALSE`, and
+English V5.0.1 was corrected to match. The conflict is therefore a translation
+error, not a server limitation. Return values (0 success, 1 timeout, 2 deadlock,
+3 parameter error, 4 already held, 5 invalid handle) and RELEASE (0, 3, 4, 5)
+match this driver's use. `release_on_commit=TRUE` locks cannot be released with
+RELEASE and are transaction-scoped, so they cannot protect DDL migrations. The
+implementation requires `FALSE` and still verifies actual behavior at
+initialization; Oracle mode is documented as Enterprise Edition only, and the
+open-source server tree has no Oracle DBMS_LOCK implementation to inspect. The
+MySQL path is session-owned (`OUT_TRANS_LOCK`) in `ob_lock_func_executor.cpp`.
+Incompatible versions fail before creating history; incompatible versions fail before creating history. MySQL lock
 support also depends on tenant data version and proxy/session capabilities.
 Documentation and source inspection are not live evidence. Establish actual
 supported server/proxy combinations in the next stage before enabling delivery.
