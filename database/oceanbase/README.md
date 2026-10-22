@@ -1,10 +1,9 @@
 # OceanBase migration driver
 
-**Status: implementation checkpoint, not release-ready.** The library foundation
-and offline tests are implemented. The distributed CLI imports this driver.
-Opt-in disposable-schema integration tests exist but have not been run; neither
-compatibility mode has real-server validation here.
-See [development handoff](../../docs/OCEANBASE_PROGRESS.md).
+**Status: implemented and included in the distributed CLI; not validated against a
+real server.** Opt-in disposable-schema integration tests exist but have not been
+run, so neither compatibility mode is certified.
+See the [design](../../docs/OCEANBASE_DESIGN.md) for decisions and evidence.
 
 The package implements upstream `database.Driver` using
 `github.com/cocosip/go-oceanbase v0.1.1`. Consumers keep using
@@ -69,8 +68,8 @@ actual behavior remains unverified live. MySQL native locks also depend on
 server and OBProxy capabilities. See the linked evidence in the design document.
 
 Initialization lock waits use `migrate.DefaultLockTimeout`; a configured statement
-timeout can impose an earlier bound. Existing CLI `-lock-timeout` will apply once
-the new driver is composed into that CLI. Runtime lock waits are cancelable on
+timeout can impose an earlier bound. The CLI `-lock-timeout` applies to
+lock acquisition. Runtime lock waits are cancelable on
 driver close and bounded by `StatementTimeout` when configured.
 
 ## SQL and version state

@@ -1,8 +1,7 @@
 # DM Driver Design
 
-Status: updated 2026-10-16. DM8 8.1.4.80 Oracle-mode lock and migration lifecycle
-verified; native Drop has a separate failing integration test. See the
-[validation report](DM_LOCK_COMPATIBILITY.md) for exact scope and limits.
+Status: DM8 8.1.4.80 Oracle-mode lock and migration lifecycle verified; native Drop
+has a separate failing integration test (see [section 5](#lock-compatibility-finding)).
 This document extends [the project architecture](DESIGN.md). Connection examples,
 account setup and test commands belong to the [DM driver guide](../database/dm/README.md).
 
@@ -205,7 +204,7 @@ On DM8 8.1.4.80 in Oracle compatibility mode with client v1.8.23, the former
 anonymous block mixing an OUT result and an IN lock ID prepares successfully
 but fails during execution with error 6001/EOF. SELECT with an IN lock ID works
 on a fresh session under the same parameters. See the
-[reproduction and validation report](DM_LOCK_COMPATIBILITY.md); this is not a
+[lock compatibility finding](#lock-compatibility-finding); this is not a
 claim that every anonymous block or every DM8 build has the same defect.
 Positional arguments avoid Oracle-specific
 parameter names: DM documents `LOCK_ID` and `LOCK_MODE`, whereas the Oracle
@@ -245,6 +244,38 @@ read routing; that is why the native pool settings above are required. Tests
 must prove lock exclusion across two independent pools, DDL, commit/rollback,
 disconnect and error cleanup. Cluster-wide exclusion is not certified merely
 by a single-node test; DSC/MPP and failover topologies need separate validation.
+
+### Lock compatibility finding
+
+Observed on DM8 8.1.4.80 (`COMPATIBLE_MODE=2`, client `gitee.com/chunanyong/dm
+v1.8.23`, no GORM): the former lock call, an anonymous block combining an OUT
+result and an IN lock ID, fails at execution with 6001/EOF. A `SELECT
+DBMS_LOCK.REQUEST(?, 6, 0, FALSE) FROM DUAL` with the same IN-bound ID succeeds
+on a fresh session. The comparison used identical DSN, ID, mode, wait time and
+context type, with Background and cancelable contexts, and explicit
+Prepare/Execute/Close, so the failure does not depend on polling, dynamic IDs or
+cancellation. The first visible client error was Execute's EOF. No server log or
+packet capture was available, so the server- or client-side cause is not
+established and the original broken-pipe error is not attributed to it.
+
+The fix is limited to this driver: REQUEST and RELEASE use `SELECT ... FROM
+DUAL` read with `QueryRowContext().Scan()` on the reserved connection. Dynamic
+lock IDs, `release_on_commit=FALSE`, polling, deadlines, Close cancellation,
+disconnect discard and return-code checks are unchanged; unknown errors,
+permission errors, disconnects and non-zero codes never count as success.
+
+Verified on a disposable schema: initialization, upstream version/dirty
+conformance, two-connection exclusion, lock survival across COMMIT/ROLLBACK/DDL,
+unlock and Close release, Up and repeated Up, failed-migration dirty state,
+Force/Down, timeout termination, and refusal to replace a closed native
+connection. Unverified: PG mode (7), other server versions, failover, real
+network faults, cross-schema dependencies and materialized views. The full
+integration suite still has one failure: `native Drop dependencies` leaves a
+sequence, procedure, synonym and view that the Drop query's `PID = -1` filter
+excludes. The Drop policy and assertion are unchanged. The unprivileged test
+account could not read INI parameters (-5730), which was treated as a permission
+error, not a communication error. Reproduction:
+`database/dm/lock_compatibility_test.go` with `MIGRATE_PLUS_DM_LOCK_PROBE_DSN`.
 
 ## 6. Version state and migration execution
 

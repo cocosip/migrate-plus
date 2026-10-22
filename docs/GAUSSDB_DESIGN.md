@@ -1,8 +1,8 @@
 # GaussDB Driver Design
 
-Status: implemented, 2026-10-15. The native driver, dependency, CLI import,
-unit/protocol tests and opt-in server tests are present. Real-server validation
-remains outstanding; no Huawei GaussDB build is certified.
+Status: implemented. The native driver, dependency, CLI import, unit/protocol
+tests and opt-in server tests are present. Real-server validation remains
+outstanding; no Huawei GaussDB build is certified.
 This document extends [the project architecture](DESIGN.md) and follows the
 structure of the [Oracle](ORACLE_DESIGN.md) and [DM](DM_DESIGN.md) designs.
 

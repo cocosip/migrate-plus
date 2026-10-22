@@ -14,7 +14,7 @@ from `V$VERSION` and reads the actual schema, case sensitivity and effective
 initialization. Lock and migration lifecycle tests have been run on DM8
 8.1.4.80 in Oracle compatibility mode. This does not certify every feature:
 the native Drop test exposed a separate catalog-filter problem. See the
-[reproduction and validation report](../../docs/DM_LOCK_COMPATIBILITY.md).
+[lock compatibility finding](../../docs/DM_DESIGN.md#lock-compatibility-finding).
 
 `BACKSLASH_ESCAPE` is a static INI parameter. Initialization reads its active
 memory value with `SF_GET_PARA_VALUE(2, 'BACKSLASH_ESCAPE')`, not the on-disk
