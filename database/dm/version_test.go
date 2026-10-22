@@ -18,7 +18,7 @@ func existingStateDriver(t *testing.T, columnType string, dirty any) (*Dm, sqlmo
 	db, mock := mockDB(t)
 	expectMetadata(mock, 0, 1, 0)
 	expectLock(mock, 0)
-	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	mock.ExpectQuery(`SELECT COUNT.*BITAND\(INFO3, 255\) = 0.*BITAND\(INFO3, 131072\) = 0`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
 	mock.ExpectQuery(`SELECT "VERSION", "DIRTY".*WHERE 1 = 0`).WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
 		sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0)),
 		sqlmock.NewColumn(dirtyColumn).OfType(columnType, dirty).WithPrecisionAndScale(19, 0)))

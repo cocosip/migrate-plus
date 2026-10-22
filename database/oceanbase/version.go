@@ -94,9 +94,9 @@ func (d *OceanBase) ensureVersionTable() (err error) {
 	if err := d.verifyLockSurvival(); err != nil {
 		return err
 	}
-	query := `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?`
+	query := `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ? AND table_type = 'BASE TABLE' AND (create_options IS NULL OR create_options NOT LIKE '%TEMPORARY%')`
 	if d.mode == ob.ModeOracle {
-		query = `SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2`
+		query = `SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2 AND TEMPORARY = 'N' AND DURATION IS NULL`
 	}
 	var count int
 	if err := d.operationError(ctx, query, d.conn.QueryRowContext(ctx, query, d.schema, d.config.MigrationsTable).Scan(&count)); err != nil {
@@ -119,16 +119,17 @@ func (d *OceanBase) ensureVersionTable() (err error) {
 }
 
 func (d *OceanBase) validateVersionColumns(ctx context.Context) error {
-	query := `SELECT column_name, data_type, COALESCE(numeric_scale, 0), is_nullable FROM information_schema.columns WHERE table_schema = ? AND table_name = ?`
+	query := `SELECT column_name, data_type, numeric_precision, COALESCE(numeric_scale, 0), is_nullable FROM information_schema.columns WHERE table_schema = ? AND table_name = ?`
 	if d.mode == ob.ModeOracle {
-		query = `SELECT column_name, data_type, NVL(data_scale, 0), nullable FROM ALL_TAB_COLUMNS WHERE owner = :1 AND table_name = :2`
+		query = `SELECT column_name, data_type, data_precision, NVL(data_scale, 0), nullable FROM ALL_TAB_COLUMNS WHERE owner = :1 AND table_name = :2`
 	}
 	seen := make(map[string]bool)
 	return d.query(ctx, query, func(rows *sql.Rows) error {
 		for rows.Next() {
 			var name, kind, nullable string
+			var precision sql.NullInt64
 			var scale int
-			if err := rows.Scan(&name, &kind, &scale, &nullable); err != nil {
+			if err := rows.Scan(&name, &kind, &precision, &scale, &nullable); err != nil {
 				return err
 			}
 			name = strings.ToLower(name)
@@ -136,7 +137,13 @@ func (d *OceanBase) validateVersionColumns(ctx context.Context) error {
 			if name != "version" && name != "dirty" {
 				return fmt.Errorf("oceanbase: unsupported additional migration state column")
 			}
-			valid := kind == "bigint" || kind == "tinyint" || kind == "smallint" || kind == "int" || kind == "integer" || kind == "number" || kind == "decimal"
+			valid := false
+			switch name {
+			case "version":
+				valid = kind == "bigint" || ((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 19))
+			case "dirty":
+				valid = kind == "bigint" || kind == "tinyint" || kind == "smallint" || kind == "int" || kind == "integer" || ((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 1))
+			}
 			if seen[name] || !valid || scale != 0 || (nullable != "NO" && nullable != "N") {
 				return fmt.Errorf("oceanbase: migration state requires non-null integral version and dirty columns")
 			}

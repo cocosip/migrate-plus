@@ -404,11 +404,11 @@ func (g *GaussDB) ensureVersionTable() (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, g.Unlock()) }()
-	var kind string
-	query := `SELECT c.relkind FROM pg_catalog.pg_class c WHERE c.relnamespace = $1 AND c.relname = $2`
+	var kind, persistence string
+	query := `SELECT c.relkind, c.relpersistence FROM pg_catalog.pg_class c WHERE c.relnamespace = $1 AND c.relname = $2`
 	if err := g.query(query, func(rows *sql.Rows) error {
 		if rows.Next() {
-			return rows.Scan(&kind)
+			return rows.Scan(&kind, &persistence)
 		}
 		return nil
 	}, g.schemaID, g.config.MigrationsTable); err != nil {
@@ -418,8 +418,8 @@ func (g *GaussDB) ensureVersionTable() (err error) {
 		if err := g.exec(`CREATE TABLE ` + g.versionTable() + ` ("version" BIGINT NOT NULL PRIMARY KEY, "dirty" SMALLINT NOT NULL CHECK ("dirty" IN (0, 1)))`); err != nil {
 			return err
 		}
-	} else if kind != "r" {
-		return fmt.Errorf("gaussdb: migration state must be an ordinary table")
+	} else if kind != "r" || persistence != "p" {
+		return fmt.Errorf("gaussdb: migration state must be a permanent ordinary table")
 	}
 	query = `SELECT a.attname, a.atttypid::bigint, a.attnotnull,
 EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conrelid = c.oid AND k.contype = 'p'

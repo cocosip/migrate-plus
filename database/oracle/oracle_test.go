@@ -21,6 +21,9 @@ const (
 	countColumn      = "count"
 	objectTypeColumn = "object_type"
 	objectNameColumn = "object_name"
+	columnName       = "name"
+	columnType       = "type"
+	columnNullable   = "nullable"
 )
 
 // Oracle output parameters are passed through database/sql, not wire values.
@@ -85,7 +88,12 @@ func expectMetadata(mock sqlmock.Sqlmock, server, compatible string) {
 
 func versionRows() *sqlmock.Rows { return sqlmock.NewRows([]string{"version", "dirty"}) }
 
-func typeDependencyRows() *sqlmock.Rows { return sqlmock.NewRows([]string{"name", "referenced"}) }
+func versionColumnRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{columnName, columnType, "precision", "scale", columnNullable}).
+		AddRow("VERSION", "NUMBER", 19, 0, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N")
+}
+
+func typeDependencyRows() *sqlmock.Rows { return sqlmock.NewRows([]string{columnName, "referenced"}) }
 
 func initializedDriver(t *testing.T) (*Oracle, sqlmock.Sqlmock) {
 	t.Helper()
@@ -94,6 +102,7 @@ func initializedDriver(t *testing.T) (*Oracle, sqlmock.Sqlmock) {
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2`).
 		WithArgs("APP", "SCHEMA_MIGRATIONS").WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	mock.ExpectQuery(`SELECT column_name, data_type, data_precision`).WithArgs("APP", "SCHEMA_MIGRATIONS").WillReturnRows(versionColumnRows())
 	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(versionRows())
 	expectUnlock(mock, 0)
 	d, err := WithInstance(db, nil)
@@ -131,6 +140,12 @@ func TestWithInstanceCreatesVersionTableUnderSessionLock(t *testing.T) {
 	}
 }
 
+func TestDropSuffixSupportsStandaloneTriggers(t *testing.T) {
+	if suffix, err := dropSuffix("TRIGGER"); err != nil || suffix != "" {
+		t.Fatalf("trigger suffix = %q, %v", suffix, err)
+	}
+}
+
 func TestWithInstanceRejectsNilPoolAndInvalidConfig(t *testing.T) {
 	if _, err := WithInstance(nil, nil); err == nil {
 		t.Fatal("accepted nil pool")
@@ -162,6 +177,7 @@ func TestWithInstanceDiscardsSessionWhenInitialUnlockFails(t *testing.T) {
 	expectMetadata(mock, "19.0.0.0.0", testVersion19)
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	mock.ExpectQuery(`SELECT column_name, data_type, data_precision`).WithArgs("APP", "SCHEMA_MIGRATIONS").WillReturnRows(versionColumnRows())
 	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(versionRows())
 	expectUnlock(mock, 5)
 	mock.ExpectClose()
@@ -353,7 +369,8 @@ func TestDropQuotesSchemaObjectsWithoutCascading(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{objectTypeColumn, objectNameColumn}))
 	mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS`).WithArgs("APP", "APP").
 		WillReturnRows(sqlmock.NewRows([]string{objectTypeColumn, objectNameColumn}).
-			AddRow("VIEW", "v\"x").AddRow("TABLE", "T").AddRow("SEQUENCE", "S"))
+			AddRow("TRIGGER", "trig").AddRow("VIEW", "v\"x").AddRow("TABLE", "T").AddRow("SEQUENCE", "S"))
+	mock.ExpectExec(`DROP TRIGGER "APP"\."trig"`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DROP VIEW "APP"\."v""x"`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DROP TABLE "APP"\."T" PURGE$`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DROP SEQUENCE "APP"\."S"`).WillReturnResult(sqlmock.NewResult(0, 0))
@@ -376,7 +393,7 @@ func TestDropMaterializedViewsBeforeListingRemainingTables(t *testing.T) {
 			if prebuilt {
 				remaining.AddRow("TABLE", "CACHE")
 			}
-			mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS[\s\S]*object_type IN \('VIEW', 'TABLE',`).
+			mock.ExpectQuery(`SELECT object_type, object_name FROM ALL_OBJECTS[\s\S]*object_type IN \('TRIGGER', 'VIEW', 'TABLE',`).
 				WithArgs("APP", "APP").WillReturnRows(remaining)
 			if prebuilt {
 				mock.ExpectExec(`DROP TABLE "APP"\."CACHE" PURGE$`).WillReturnResult(sqlmock.NewResult(0, 0))

@@ -105,7 +105,7 @@ func (sp *splitter) semicolon(i int) error {
 }
 
 func (sp *splitter) token(i int, backslash, ansiQuotes bool) (int, error) {
-	if sp.seg.set > 0 && strings.HasPrefix(sp.script[i:], "@@") {
+	if sp.seg.set && strings.HasPrefix(sp.script[i:], "@@") {
 		return 0, errSystemSet
 	}
 	end, word, meaningful, err := sqlToken(sp.script, i, sp.mode, backslash, ansiQuotes)
@@ -134,18 +134,17 @@ var errSystemSet = fmt.Errorf("oceanbase: migration scripts cannot change sessio
 
 // segment tracks statement boundaries inside procedural bodies.
 type segment struct {
-	start    bool // next word begins a statement inside a procedural body
-	set      int  // words left to inspect after a MySQL SET in a body
+	set      bool // currently scanning a MySQL SET assignment list in a body
 	depth    int  // MySQL BEGIN/CASE nesting; a semicolon at depth zero ends the statement
 	skipCase bool // the CASE after END CASE closes the construct already counted
 }
 
-func newSegment() segment { return segment{start: true} }
+func newSegment() segment { return segment{} }
 
-func (s *segment) next() { s.start, s.set = true, 0 }
+func (s *segment) next() { s.set = false }
 
 func (s *segment) word(word, following string, proc bool, mode ob.Mode) error {
-	if proc && s.start {
+	if proc {
 		switch word {
 		case keywordCommit, keywordRollback, "SAVEPOINT":
 			return errTransactionControl
@@ -155,13 +154,11 @@ func (s *segment) word(word, following string, proc bool, mode ob.Mode) error {
 			}
 		case "SET":
 			if mode == ob.ModeMySQL {
-				s.set = 3
-				s.start = false
-				return nil
+				s.set = true
 			}
 		}
-	} else if s.set > 0 {
-		s.set--
+	}
+	if s.set {
 		switch word {
 		case "SESSION", "GLOBAL", "LOCAL", "PERSIST", "PERSIST_ONLY", "NAMES", "CHARACTER", "CHARSET", "TRANSACTION", "AUTOCOMMIT", "SQL_MODE":
 			return errSystemSet
@@ -188,7 +185,6 @@ func (s *segment) word(word, following string, proc bool, mode ob.Mode) error {
 			}
 		}
 	}
-	s.start = proc && s.set == 0 && (word == keywordBegin || word == "THEN" || word == "ELSE" || word == "LOOP" || word == "REPEAT" || word == "DO")
 	return nil
 }
 

@@ -25,6 +25,16 @@ func TestVersionRejectsCorruptHistory(t *testing.T) {
 	}
 }
 
+func TestInitializationRejectsNarrowExistingVersionColumns(t *testing.T) {
+	o, mock := initializedDriver(t)
+	mock.ExpectQuery(`SELECT column_name, data_type, data_precision`).WithArgs("APP", "SCHEMA_MIGRATIONS").
+		WillReturnRows(sqlmock.NewRows([]string{"name", "type", "precision", "scale", "nullable"}).
+			AddRow("VERSION", "NUMBER", 10, 0, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N"))
+	if err := o.validateVersionColumns(context.Background()); err == nil {
+		t.Fatal("accepted a narrow Oracle migration version column")
+	}
+}
+
 func TestDropRejectsExternalDependenciesBeforeDDL(t *testing.T) {
 	o, mock := initializedDriver(t)
 	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM`).WithArgs("APP", "APP", "APP", "APP").
@@ -52,6 +62,7 @@ func TestInitializationRejectsCorruptHistoryAndReleasesLock(t *testing.T) {
 	expectMetadata(mock, "19.0.0.0.0", testVersion19)
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	mock.ExpectQuery(`SELECT column_name, data_type, data_precision`).WithArgs("APP", "SCHEMA_MIGRATIONS").WillReturnRows(versionColumnRows())
 	mock.ExpectQuery(`SELECT version, dirty FROM`).
 		WillReturnRows(versionRows().AddRow(7, 0).AddRow(8, 1)).RowsWillBeClosed()
 	expectUnlock(mock, 0)

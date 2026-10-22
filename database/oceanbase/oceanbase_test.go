@@ -200,7 +200,11 @@ func TestInitializationChecksLockBeforeCreatingHistory(t *testing.T) {
 					expectLock(mock, mode, 4)
 				}
 			}
-			mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
+			query := `SELECT COUNT.*create_options`
+			if mode == ob.ModeOracle {
+				query = `SELECT COUNT.*TEMPORARY = 'N'`
+			}
+			mock.ExpectQuery(query).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
 			mock.ExpectExec(`CREATE TABLE`).WillReturnResult(sqlmock.NewResult(0, 0))
 			expectUnlock(mock, mode, successCode(mode))
 			d, err := WithInstance(db, nil)

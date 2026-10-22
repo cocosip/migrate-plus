@@ -12,6 +12,10 @@ import (
 	"github.com/golang-migrate/migrate/v4/database"
 )
 
+func versionColumnRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{objectNameColumn, "type", "precision", "scale", "nullable"})
+}
+
 func TestSetVersionRollbackPreservesOriginalError(t *testing.T) {
 	d, mock := mockDriver(t, ob.ModeMySQL)
 	expectSession(mock, d.mode, "APP")
@@ -75,7 +79,7 @@ func TestNilVersionState(t *testing.T) {
 func TestValidateExistingVersionColumns(t *testing.T) {
 	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
 		d, mock := mockDriver(t, mode)
-		mock.ExpectQuery(`SELECT column_name`).WillReturnRows(sqlmock.NewRows([]string{objectNameColumn, "type", "scale", "nullable"}).AddRow("VERSION", "NUMBER", 0, "N").AddRow("DIRTY", "NUMBER", 0, "N"))
+		mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().AddRow("VERSION", "NUMBER", 19, 0, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N"))
 		if err := d.validateVersionColumns(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -83,9 +87,25 @@ func TestValidateExistingVersionColumns(t *testing.T) {
 		if version, dirty, err := d.Version(); err != nil || version != 7 || !dirty {
 			t.Fatalf("existing state=%d %v %v", version, dirty, err)
 		}
-		mock.ExpectQuery(`SELECT column_name`).WillReturnRows(sqlmock.NewRows([]string{objectNameColumn, "type", "scale", "nullable"}).AddRow("VERSION", "NUMBER", 1, "N").AddRow("DIRTY", "NUMBER", 0, "N"))
+		mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().AddRow("VERSION", "NUMBER", 19, 1, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N"))
 		if err := d.validateVersionColumns(context.Background()); err == nil {
 			t.Fatal("accepted fractional version column")
+		}
+	}
+}
+
+func TestValidateExistingVersionColumnsRejectsNarrowVersion(t *testing.T) {
+	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+		d, mock := mockDriver(t, mode)
+		rows := versionColumnRows()
+		if mode == ob.ModeMySQL {
+			rows.AddRow("VERSION", "TINYINT", 3, 0, "NO").AddRow("DIRTY", "TINYINT", 3, 0, "NO")
+		} else {
+			rows.AddRow("VERSION", "NUMBER", 10, 0, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N")
+		}
+		mock.ExpectQuery(`SELECT column_name`).WillReturnRows(rows)
+		if err := d.validateVersionColumns(context.Background()); err == nil {
+			t.Fatalf("%v: accepted a migration version column without 64-bit capacity", mode)
 		}
 	}
 }

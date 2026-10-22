@@ -83,11 +83,11 @@ func stateColumns() *sqlmock.Rows {
 
 func expectVersionTable(mock sqlmock.Sqlmock, exists bool) {
 	expectLock(mock, true)
-	relation := sqlmock.NewRows([]string{"relkind"})
+	relation := sqlmock.NewRows([]string{"relkind", "relpersistence"})
 	if exists {
-		relation.AddRow("r")
+		relation.AddRow("r", "p")
 	}
-	mock.ExpectQuery(`SELECT c.relkind FROM pg_catalog.pg_class`).WithArgs(int64(42), "schema_migrations").WillReturnRows(relation)
+	mock.ExpectQuery(`SELECT c.relkind, c.relpersistence FROM pg_catalog.pg_class`).WithArgs(int64(42), "schema_migrations").WillReturnRows(relation)
 	if !exists {
 		mock.ExpectExec(`CREATE TABLE "app"\."schema_migrations"`).WillReturnResult(sqlmock.NewResult(0, 0))
 	}
@@ -154,6 +154,19 @@ func TestInitializationRejectsUnknownProductModeAndSystemSchema(t *testing.T) {
 				t.Fatalf("unsafe initialization = %v", err)
 			}
 		})
+	}
+}
+
+func TestInitializationRejectsUnloggedVersionTable(t *testing.T) {
+	db, mock := mockDB(t)
+	expectMetadata(mock, "A", 0)
+	expectLock(mock, true)
+	mock.ExpectQuery(`SELECT c.relkind, c.relpersistence FROM pg_catalog.pg_class`).WithArgs(int64(42), "schema_migrations").
+		WillReturnRows(sqlmock.NewRows([]string{"relkind", "relpersistence"}).AddRow("r", "u"))
+	expectUnlock(mock, true)
+	mock.ExpectClose()
+	if _, err := withInstance(db, nil, idleStatus); err == nil || !strings.Contains(err.Error(), "permanent") {
+		t.Fatalf("accepted unlogged migration table: %v", err)
 	}
 }
 

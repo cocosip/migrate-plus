@@ -351,7 +351,7 @@ func (d *Dm) ensureVersionTable() (err error) {
 		name = "UPPER(NAME)"
 	}
 	count := 0
-	query := `SELECT COUNT(*) FROM SYS.SYSOBJECTS WHERE SCHID = ? AND TYPE$ = 'SCHOBJ' AND SUBTYPE$ = 'UTAB' AND ` + name + ` = ?`
+	query := `SELECT COUNT(*) FROM SYS.SYSOBJECTS WHERE SCHID = ? AND TYPE$ = 'SCHOBJ' AND SUBTYPE$ = 'UTAB' AND BITAND(INFO3, 255) = 0 AND BITAND(INFO3, 131072) = 0 AND ` + name + ` = ?`
 	if err := d.query(query, func(rows *sql.Rows) error {
 		if !rows.Next() {
 			return sql.ErrNoRows

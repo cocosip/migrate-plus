@@ -22,7 +22,7 @@ func (o *Oracle) Drop() error {
 	// Dropping a prebuilt materialized view leaves its table for the second query.
 	for _, objectTypes := range []string{
 		"'MATERIALIZED VIEW'",
-		"'VIEW', 'TABLE', 'SEQUENCE', 'SYNONYM', 'PACKAGE', 'PROCEDURE', 'FUNCTION'",
+		"'TRIGGER', 'VIEW', 'TABLE', 'SEQUENCE', 'SYNONYM', 'PACKAGE', 'PROCEDURE', 'FUNCTION'",
 	} {
 		objects, err := o.dropStatements(objectTypes)
 		if err != nil {
@@ -107,7 +107,7 @@ WHERE owner = :1 AND subobject_name IS NULL AND generated = 'N' AND secondary = 
 AND object_type IN (` + objectTypes + `)
 AND object_name NOT IN (SELECT table_name FROM ALL_NESTED_TABLES WHERE owner = :2)
 AND object_name NOT LIKE 'BIN$%'
-ORDER BY DECODE(object_type, 'MATERIALIZED VIEW', 0, 'VIEW', 1, 'TABLE', 2, 'SEQUENCE', 3, 'SYNONYM', 4, 'PACKAGE', 5, 'PROCEDURE', 6, 'FUNCTION', 7, 'TYPE', 8)`
+	ORDER BY DECODE(object_type, 'TRIGGER', 0, 'MATERIALIZED VIEW', 1, 'VIEW', 2, 'TABLE', 3, 'SEQUENCE', 4, 'SYNONYM', 5, 'PACKAGE', 6, 'PROCEDURE', 7, 'FUNCTION', 8, 'TYPE', 9)`
 	rows, err := o.conn.QueryContext(ctx, query, o.schema, o.schema)
 	if err != nil {
 		return nil, queryError(query, err)
@@ -135,7 +135,7 @@ func dropSuffix(kind string) (string, error) {
 	switch kind {
 	case "TABLE":
 		return " PURGE", nil
-	case "TYPE", "MATERIALIZED VIEW", "VIEW", "SEQUENCE", "SYNONYM", "PACKAGE", objectProcedure, objectFunction:
+	case "TRIGGER", "TYPE", "MATERIALIZED VIEW", "VIEW", "SEQUENCE", "SYNONYM", "PACKAGE", objectProcedure, objectFunction:
 		return "", nil
 	default:
 		return "", fmt.Errorf("oracle: unsupported object type %q", kind)

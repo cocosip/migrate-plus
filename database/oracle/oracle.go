@@ -324,16 +324,58 @@ func (o *Oracle) ensureVersionTable() (err error) {
 	defer func() { err = errors.Join(err, o.Unlock()) }()
 	ctx, cancel := o.operationContext()
 	defer cancel()
-	query := `SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2`
+	query := `SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2 AND TEMPORARY = 'N' AND DURATION IS NULL`
 	var count int
 	if err := o.conn.QueryRowContext(ctx, query, o.schema, o.config.MigrationsTable).Scan(&count); err != nil {
 		return queryError(query, err)
 	}
 	if count > 0 {
+		if err := o.validateVersionColumns(ctx); err != nil {
+			return err
+		}
 		_, _, err = o.Version()
 		return err
 	}
 	return o.exec(`CREATE TABLE ` + o.versionTable() + ` (version NUMBER(19) NOT NULL PRIMARY KEY, dirty NUMBER(1) NOT NULL CHECK (dirty IN (0, 1)))`)
+}
+
+func (o *Oracle) validateVersionColumns(ctx context.Context) error {
+	query := `SELECT column_name, data_type, data_precision, NVL(data_scale, 0), nullable FROM ALL_TAB_COLUMNS WHERE owner = :1 AND table_name = :2`
+	seen := make(map[string]bool)
+	rows, err := o.conn.QueryContext(ctx, query, o.schema, o.config.MigrationsTable)
+	if err != nil {
+		return queryError(query, err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var name, kind, nullable string
+		var precision sql.NullInt64
+		var scale int
+		if err := rows.Scan(&name, &kind, &precision, &scale, &nullable); err != nil {
+			return err
+		}
+		name, kind = strings.ToLower(name), strings.ToLower(kind)
+		valid := false
+		switch name {
+		case "version":
+			valid = kind == "number" && (!precision.Valid || precision.Int64 >= 19)
+		case "dirty":
+			valid = kind == "number" && (!precision.Valid || precision.Int64 >= 1)
+		default:
+			return fmt.Errorf("oracle: unsupported additional migration state column")
+		}
+		if seen[name] || !valid || scale != 0 || (nullable != "N" && nullable != "NO") {
+			return fmt.Errorf("oracle: migration state requires non-null integral version and dirty columns")
+		}
+		seen[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return queryError(query, err)
+	}
+	if len(seen) != 2 {
+		return fmt.Errorf("oracle: missing migration state columns")
+	}
+	return nil
 }
 
 func (o *Oracle) versionTable() string {

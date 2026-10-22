@@ -92,6 +92,15 @@ func TestDependencyOrderingRejectsCyclesAndIgnoresSelfEdges(t *testing.T) {
 	}
 }
 
+func TestDropCatalogIncludesStandaloneObjectsWithParentIDs(t *testing.T) {
+	d, mock := initializedDriver(t)
+	mock.ExpectQuery(`SELECT o.ID, o.NAME, o.SUBTYPE\$.*o\.PID = -1 OR o\.SUBTYPE\$ IN \('VIEW', 'SEQ', 'SYNOM', 'PKG', 'PROC', 'TYPE', 'CLASS'\) OR \(o\.SUBTYPE\$ = 'TRIG' AND BITAND\(o\.INFO1, 2\) = 0\)`).WithArgs(101, 0).
+		WillReturnRows(dropObjectRows())
+	if _, err := d.dropObjects(0); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDropPreflightAllowsLocalForeignKeyConstraintCycles(t *testing.T) {
 	d, mock := initializedDriver(t)
 	expectDropPreflight(mock, 0)

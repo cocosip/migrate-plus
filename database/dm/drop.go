@@ -125,8 +125,10 @@ WHERE f.TYPE$ = 'F' AND t.SCHID = ?`
 
 func (d *Dm) dropObjects(materialized int) ([]dropObject, error) {
 	mview := `CASE WHEN EXISTS (SELECT 1 FROM SYS.SYSDEPENDENCIES dep WHERE dep.ID = o.ID AND dep.TYPE$ = 'MATERIALIZED VIEW') THEN 1 ELSE 0 END`
+	// INFO1 BIT(1) marks table-level triggers; DM drops them with their table,
+	// so only standalone event triggers are selected by the PID-relaxed branch.
 	query := `SELECT o.ID, o.NAME, o.SUBTYPE$, o.INFO1, ` + mview + ` FROM SYS.SYSOBJECTS o
-WHERE o.SCHID = ? AND o.TYPE$ = 'SCHOBJ' AND o.PID = -1
+WHERE o.SCHID = ? AND o.TYPE$ = 'SCHOBJ' AND (o.PID = -1 OR o.SUBTYPE$ IN ('VIEW', 'SEQ', 'SYNOM', 'PKG', 'PROC', 'TYPE', 'CLASS') OR (o.SUBTYPE$ = 'TRIG' AND BITAND(o.INFO1, 2) = 0))
 AND o.SUBTYPE$ IN ('UTAB', 'VIEW', 'SEQ', 'SYNOM', 'PKG', 'PROC', 'TYPE', 'CLASS', 'TRIG')
 AND NOT (o.SUBTYPE$ IN ('PKG', 'PROC') AND BITAND(o.INFO1, 4) <> 0)
 AND NOT (o.SUBTYPE$ = 'VIEW' AND BITAND(o.INFO1, 16) <> 0)

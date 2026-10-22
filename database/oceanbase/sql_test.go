@@ -91,6 +91,10 @@ func TestProceduralBodiesRejectTransactionAndSystemCommands(t *testing.T) {
 		},
 		ob.ModeMySQL: {
 			"CREATE PROCEDURE p() BEGIN COMMIT; END;",
+			"CREATE PROCEDURE p() COMMIT;",
+			"CREATE PROCEDURE p() SET autocommit=0;",
+			"CREATE PROCEDURE p() BEGIN SET @x=COALESCE(@x,@y,0),autocommit=0; END;",
+			"CREATE PROCEDURE p() BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION COMMIT; SELECT 1; END;",
 			"CREATE PROCEDURE p() BEGIN SELECT 1; START TRANSACTION; END;",
 			"CREATE PROCEDURE p() BEGIN SELECT 1; SET autocommit = 0; END;",
 			"CREATE PROCEDURE p() BEGIN SELECT 1; SET @@session.sql_mode = ''; END;",
