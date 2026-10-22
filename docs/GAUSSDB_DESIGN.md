@@ -251,7 +251,9 @@ The configurable table is an ordinary identifier; catalog-returned schema and
 object names require proper quoting even when they contain quotes or Unicode.
 
 Discover the exact schema-qualified relation through native catalogs under
-the session lock. Validate an existing table's ordinary relation kind,
+the session lock. Validate an existing table's permanent ordinary relation
+kind (`relkind 'r'`, `relpersistence 'p'`; unlogged and temporary tables are
+rejected because unlogged contents can be discarded on restart or failover),
 non-null BIGINT version with a single-column primary key, non-null integer dirty
 column and current data. Existing CHECK expressions are not interpreted;
 Version always enforces dirty 0/1 and at most one row. A BOOLEAN dirty column is not

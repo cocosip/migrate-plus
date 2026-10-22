@@ -134,7 +134,10 @@ Upstream controls dirty/clean transitions. State uses BIGINT `version` and
 integer `dirty` (0/1), committed with transactional DELETE/INSERT, including
 dirty version -1. Empty history returns upstream NilVersion. A preexisting
 BOOLEAN dirty column is incompatible; invalid or multiple state rows fail.
-The state table must be an ordinary table with a non-null BIGINT primary-key
+The state table must be a permanent ordinary table: unlogged and temporary
+tables are rejected through `pg_class.relpersistence`, because unlogged
+contents can be discarded on failover or restart while persistent objects
+remain. It needs a non-null BIGINT primary-key
 version and non-null integer dirty column. It is not converted automatically.
 
 Do not assume atomic DDL across modes/builds. Earlier statements may already

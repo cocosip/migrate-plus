@@ -17,7 +17,7 @@ be at least 10.2. Oracle 10.1 and older are rejected.
 | Capability | Selection |
 |---|---|
 | Migration table name limit | 30 bytes; 128 when both server and `COMPATIBLE` are at least 12.2 |
-| Version / dirty columns | `NUMBER(19)` / `NUMBER(1)` on every version |
+| Version / dirty columns | `NUMBER(19)` / `NUMBER(1)` on every version; existing tables must be permanent (`TEMPORARY='N'`, no `DURATION`) and keep `NUMBER` columns with at least that precision |
 | Locking | `DBMS_LOCK` session lock on every version |
 | User migration SQL | Executed without rewriting; the author targets the server's SQL dialect |
 
@@ -158,8 +158,11 @@ hashes of schema and normalized migration table name; rare collisions cause unne
 contention. Processes coordinating the same schema must use the same table name.
 
 Upstream `drop` is destructive: it removes the migration schema's user tables
-(including their indexes, constraints and triggers), materialized views, views,
-sequences, synonyms, packages, procedures, functions, and types. Materialized views
+(including their indexes, constraints and triggers), standalone triggers such as
+schema event triggers, materialized views, views,
+sequences, synonyms, packages, procedures, functions, and types. Standalone
+triggers are dropped first and system-generated triggers are left alone;
+materialized views
 are dropped before listing remaining tables, including tables retained by
 `ON PREBUILT TABLE` views. It does not
 remove the database, Oracle user, grants, scheduler jobs, or database links.

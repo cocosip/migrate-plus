@@ -81,7 +81,8 @@ migrate-plus/
 │   ├── oracle/                    # Oracle database.Driver using go-ora v2
 │   ├── dm/                        # DM8 database.Driver using the native DM client
 │   ├── gaussdb/                   # GaussDB database.Driver using Huawei's native client
-│   └── opengauss/                 # openGauss database.Driver using the official pq-fork client
+│   ├── opengauss/                 # openGauss database.Driver using the official pq-fork client
+│   └── oceanbase/                 # OceanBase database.Driver (MySQL and Oracle tenants)
 ├── cli/
 │   ├── main.go                    # Public Main(version string)
 │   ├── commands.go                # Calls upstream migrate operations
@@ -96,7 +97,8 @@ migrate-plus/
 │   ├── ORACLE_DESIGN.md           # Oracle-specific driver design
 │   ├── DM_DESIGN.md               # DM-specific driver design
 │   ├── GAUSSDB_DESIGN.md          # GaussDB-specific driver design
-│   └── OPENGAUSS_DESIGN.md        # openGauss-specific driver design
+│   ├── OPENGAUSS_DESIGN.md        # openGauss-specific driver design
+│   └── OCEANBASE_DESIGN.md        # OceanBase-specific driver design
 └── .github/workflows/ci.yml
 ```
 
@@ -196,6 +198,13 @@ and provides migration exclusion through its database lock. A failed migration
 must not silently clear dirty state. The default version-table name should
 remain `schema_migrations` unless a particular driver documents a necessary
 exception; support a validated `x-migrations-table` override when implemented.
+
+An existing version table is accepted only when it is a permanent base table —
+temporary (transaction- or session-scoped) and unlogged tables are rejected with
+each database's own catalog — and its `version`/`dirty` columns have the
+capacity the driver's state writes require, such as a signed 64-bit `version`.
+History that can vanish on commit, disconnect or restart would desynchronize
+migration state from the actual schema.
 
 SQL execution and transaction capabilities differ by database. Oracle/DM script
 delimiters and procedural blocks belong in the respective driver. The project

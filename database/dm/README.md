@@ -132,7 +132,10 @@ already be committed; migrations are not promised atomic rollback.
 ## Existing migration state
 
 An existing `SCHEMA_MIGRATIONS (VERSION BIGINT, DIRTY BIT)` table is accepted
-without alteration or initialization writes. `BIT` is allowed only for `DIRTY`;
+without alteration or initialization writes, but only as a permanent table:
+DM temporary tables are rejected through `SYSOBJECTS.INFO3`, because
+transaction-scoped temporary rows vanish on commit and session-scoped rows on
+disconnect. `BIT` is allowed only for `DIRTY`;
 `VERSION` still requires `BIGINT` or an integral numeric column with at least
 19 digits of precision. Existing integer/numeric `DIRTY` columns remain supported.
 Only 0/false and 1/true are accepted; NULL, invalid values and multiple rows fail.

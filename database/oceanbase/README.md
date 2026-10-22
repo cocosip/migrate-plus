@@ -98,8 +98,14 @@ sessions. Fully qualified application DDL remains the script author's responsibi
 The actual Oracle schema and version table use Oracle identifier rules; the
 MySQL table respects the server's `lower_case_table_names` behavior. New state
 tables use `BIGINT`/`TINYINT` (MySQL, InnoDB) or `NUMBER(19)`/`NUMBER(1)` (Oracle).
-Existing tables must have exactly two non-null integral `version` and `dirty`
-columns. Existing state is not rebuilt, replayed or automatically cleared.
+An existing state table is accepted only as a permanent base table: temporary
+tables are rejected through each mode's own catalog (MySQL `create_options`,
+Oracle `TEMPORARY`/`DURATION`), because temporary history disappears on commit
+or disconnect. Existing tables must have exactly two non-null integral `version`
+and `dirty` columns with scale 0. `version` needs full signed 64-bit capacity —
+`BIGINT`, or `NUMBER`/`DECIMAL` with at least 19 digits of precision — so normal
+timestamp versions fit; `dirty` accepts narrow integer types.
+Existing state is not rebuilt, replayed or automatically cleared.
 Empty history returns upstream `NilVersion`; multiple rows, versions below `-1`
 and dirty values outside `0/1` fail. Native bind/DDL compatibility and legacy
 column encodings still need real-server coverage.

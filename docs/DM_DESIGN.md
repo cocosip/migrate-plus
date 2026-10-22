@@ -270,9 +270,12 @@ unlock and Close release, Up and repeated Up, failed-migration dirty state,
 Force/Down, timeout termination, and refusal to replace a closed native
 connection. Unverified: PG mode (7), other server versions, failover, real
 network faults, cross-schema dependencies and materialized views. The full
-integration suite still has one failure: `native Drop dependencies` leaves a
-sequence, procedure, synonym and view that the Drop query's `PID = -1` filter
-excludes. The Drop policy and assertion are unchanged. The unprivileged test
+integration suite had one failure: `native Drop dependencies` left a
+sequence, procedure, synonym and view behind because the Drop query's
+`PID = -1` filter excluded them. The filter now selects supported standalone
+objects by subtype regardless of PID, with event triggers included and
+table-level triggers still following their tables; re-verification on that
+build is still pending. The Drop policy and assertion are unchanged. The unprivileged test
 account could not read INI parameters (-5730), which was treated as a permission
 error, not a communication error. Reproduction:
 `database/dm/lock_compatibility_test.go` with `MIGRATE_PLUS_DM_LOCK_PROBE_DSN`.
@@ -293,6 +296,10 @@ Use DM-native catalogs scoped to the resolved schema, the documented
 for Drop, independent of compatibility views. Confirm table columns and
 dirty values before using a pre-existing state table; do not silently
 claim compatibility with an arbitrary application's migration history.
+A pre-existing state table must be permanent: temporary tables are rejected
+through `SYSOBJECTS.INFO3` (table/temporary type byte and the session-level
+bit), because transaction-scoped temporary rows vanish on commit and
+session-scoped rows on disconnect, desynchronizing version history.
 Legacy `VERSION BIGINT, DIRTY BIT` tables are accepted without alteration or
 initialization writes. BIT compatibility applies only to DIRTY; VERSION retains
 its 64-bit integral requirement. The native client returns BIT as int8, integers
@@ -371,9 +378,13 @@ would be an application concern and is outside this driver design.
 Match upstream's destructive Drop semantics within the original migration
 schema, including the version table. Initial supported objects are ordinary
 tables, views, sequences, synonyms, procedures, functions, packages and types,
-plus materialized views where the tested build supports them. Table-dependent
-indexes and triggers follow native DM dependency behavior. Account for
-standalone triggers if DM catalogs expose them independently.
+plus materialized views where the tested build supports them. Catalog selection
+identifies supported standalone objects by subtype, not by the `PID = -1`
+shorthand: the tested DM8 build records standalone sequences, procedures,
+synonyms and views with a parent ID. Table-dependent indexes and triggers follow
+native DM dependency behavior, so only event triggers (INFO1 BIT(1) clear) are
+selected explicitly; system-level objects remain excluded through their INFO1
+bits.
 
 Generate DM-native DROP syntax from a fixed object-type allowlist, quoting
 catalog names and using explicit schema qualification. Do not copy Oracle's

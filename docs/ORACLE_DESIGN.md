@@ -36,7 +36,7 @@ privileged `V$` version views. Resolve the current schema through
 | Capability | Selection |
 |---|---|
 | Migration table identifier limit | 30 bytes; 128 only when both versions are at least 12.2 |
-| Version state | `NUMBER(19)` version and numeric `NUMBER(1)` dirty flag |
+| Version state | `NUMBER(19)` version and numeric `NUMBER(1)` dirty flag; an existing table must be permanent (`TEMPORARY='N'`, no `DURATION`) with `NUMBER` columns of at least that precision and scale 0 |
 | Migration lock | Exclusive `DBMS_LOCK` session lock across supported versions |
 | User SQL | Executed without dialect rewriting |
 
@@ -142,8 +142,11 @@ commands, substitution variables and client scripts are not interpreted.
 ## 8. Drop boundary
 
 Remove supported objects in the original schema: user tables and dependent
-indexes/constraints/triggers, views, materialized views, sequences, synonyms,
-packages, procedures, functions and types. Drop materialized views before
+indexes/constraints/triggers, standalone triggers such as schema event triggers,
+views, materialized views, sequences, synonyms,
+packages, procedures, functions and types. Standalone triggers are dropped
+first and system-generated objects are excluded by the `generated` filter.
+Drop materialized views before
 listing remaining objects so tables retained by `ON PREBUILT TABLE` are included.
 
 Preflight visible external foreign keys and object dependencies before DDL.

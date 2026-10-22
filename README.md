@@ -111,6 +111,7 @@ database/oracle/       Native Oracle driver, unit tests, and opt-in integration 
 database/dm/           Native DM8 driver, unit tests, and opt-in integration tests
 database/gaussdb/      Native GaussDB driver, unit and opt-in integration tests
 database/opengauss/    Native openGauss driver, unit and opt-in integration tests
+database/oceanbase/    Native OceanBase driver (MySQL and Oracle tenants), unit and opt-in integration tests
 cmd/migrate-plus/      Thin executable entrypoint importing all five drivers
 docs/                  Architecture and design
 .github/workflows/     CI, CodeQL, and tag-based CLI releases

@@ -115,9 +115,14 @@ References:
 The history table has a non-null integral primary-key `version` and a `dirty`
 column constrained to 0 or 1; the DDL is mode-specific. State changes run in one
 transaction (delete, then insert) and preserve upstream `NilVersion` and dirty
-`-1` semantics. An unknown commit outcome discards the session. Existing history
-is validated (columns, types, nullability, one row) and is never reset, rebuilt
-or dirty-cleared automatically; extra columns are rejected.
+`-1` semantics. An unknown commit outcome discards the session. An existing
+history table is accepted only as a permanent base table — MySQL mode checks
+`create_options` for `TEMPORARY`, Oracle mode checks `TEMPORARY='N'` with no
+`DURATION` — and its columns are validated with each mode's own metadata:
+exactly non-null, scale-0 integral `version`/`dirty`, where `version` needs full
+signed 64-bit capacity (`BIGINT`, or `NUMBER`/`DECIMAL` with at least 19 digits
+of precision) and `dirty` accepts narrow integer types. History is never reset,
+rebuilt or dirty-cleared automatically; extra columns are rejected.
 
 ## 6. SQL framing and preflight
 
@@ -137,7 +142,9 @@ comments, Oracle alternative quoting (`q'[...]'`) and, in MySQL, according to
 Top-level statements are checked by their first word. Inside procedure,
 function, trigger, event and anonymous-block bodies only transaction control
 (`COMMIT`, `ROLLBACK`, `SAVEPOINT`, MySQL `START`/`XA`) and MySQL `SET` of
-session/system variables are rejected, so loops, `EXIT` and local-variable `SET`
+session/system variables are rejected — at any body position, including
+single-statement bodies and exception handlers, and across the whole `SET`
+assignment list — so loops, `EXIT` and local-variable `SET`
 remain valid. MySQL bodies are delimited by `BEGIN`/`CASE` ... `END` nesting
 because `DELIMITER` is unavailable; this is word-level, not a full MySQL parser.
 The driver re-checks schema and autocommit before and after `Run` and before
