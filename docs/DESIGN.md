@@ -270,6 +270,11 @@ Use the same documentation structure for every implemented database driver:
 | DM | [DM_DESIGN.md](DM_DESIGN.md) | [database/dm/README.md](../database/dm/README.md) |
 | GaussDB | [GAUSSDB_DESIGN.md](GAUSSDB_DESIGN.md) | [database/gaussdb/README.md](../database/gaussdb/README.md) |
 | openGauss | [OPENGAUSS_DESIGN.md](OPENGAUSS_DESIGN.md) | [database/opengauss/README.md](../database/opengauss/README.md) |
+| OceanBase (library checkpoint; not in CLI) | [OCEANBASE_DESIGN.md](OCEANBASE_DESIGN.md) | [database/oceanbase/README.md](../database/oceanbase/README.md) |
+
+OceanBase integration is in progress; its [handoff](OCEANBASE_PROGRESS.md)
+records remaining protocol, real-server and CLI work separately from the
+implemented library foundation. It has no real-server compatibility claim.
 
 This document owns upstream integration, package boundaries, common migration
 contracts, CLI composition and CI. Each driver design owns dependency decisions,

@@ -49,6 +49,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+## OceanBase Go client dependency
+
+`database/oceanbase` imports
+[`github.com/cocosip/go-oceanbase v0.1.1`](https://github.com/cocosip/go-oceanbase/tree/v0.1.1).
+Its module archive includes an MIT license, copyright 2026 go-oceanbase
+contributors. Client source is used as a Go module dependency rather than copied
+into this repository.
+
 ## DM Go client dependency
 
 `database/dm` imports [gitee.com/chunanyong/dm v1.8.23](https://gitee.com/chunanyong/dm/tree/v1.8.23).

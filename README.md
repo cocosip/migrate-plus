@@ -44,6 +44,12 @@ for connection strings, SQL restrictions and tests.
 Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
 The distributed CLI includes Oracle, DM, GaussDB, openGauss and the upstream file source.
 
+An OceanBase MySQL/Oracle library foundation is available in `database/oceanbase`
+using `github.com/cocosip/go-oceanbase v0.1.1`. It is an implementation checkpoint,
+is not included in the distributed CLI, and has no native-protocol or real-server
+acceptance yet. See the [development handoff](docs/OCEANBASE_PROGRESS.md) and
+[driver constraints](database/oceanbase/README.md) before continuing or using it.
+
 ```sh
 go run ./cmd/migrate-plus -help
 go run ./cmd/migrate-plus -version
@@ -152,6 +158,8 @@ Design documentation: [project architecture](docs/DESIGN.md),
 [Oracle driver](docs/ORACLE_DESIGN.md), [DM driver](docs/DM_DESIGN.md),
 [GaussDB driver](docs/GAUSSDB_DESIGN.md), and
 [openGauss driver](docs/OPENGAUSS_DESIGN.md).
+The in-progress [OceanBase design](docs/OCEANBASE_DESIGN.md) has a separate
+[checkpoint and continuation guide](docs/OCEANBASE_PROGRESS.md).
 Connection examples and operational instructions are in each driver package's README.
 
 ## License
