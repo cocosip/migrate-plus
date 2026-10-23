@@ -81,7 +81,7 @@ The report always states completeness separately from pass/fail counts.
 | Recovery | Inspect partial DDL/DML, repair only fixture-owned effects, Force the known state, resume; no blind retry or automatic dirty clearing |
 | LockTimeout | Bounded contention through upstream API; driver initialization lock wait is independently bounded; failed contender cannot change history/data; next operation acquires after release |
 | Prefetch/buffering | Prefetch 0, 1 and default; script larger than DefaultBufferSize; same order/results; source read error and safe cleanup |
-| GracefulStop | Stop before starting and deterministically between migrations; completed version clean, pending migration unapplied, lock released; reopen and resume. Coordinate with observer/gates, not timing guesses |
+| GracefulStop | Stop before starting with Up and deterministically between explicit Run migrations; completed version clean, pending migration unapplied, lock released; reopen and resume. Upstream v4.20.1 Up races on its internal stop flag during asynchronous stopping; that path is not certified |
 | Close | Both source/database close errors checked; repeated driver Close; normal, failure, timeout and stop paths; subsequent new connection/migrator works |
 | Drop | Real engine Drop and driver Drop, empty and populated schema; dependent objects and local FK cycles; verify inventory/history removed; reopen is required and usable |
 

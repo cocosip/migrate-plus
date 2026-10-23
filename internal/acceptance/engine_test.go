@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"testing/fstest"
+	"testing/synctest"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -23,6 +24,7 @@ type engineStore struct {
 	dirty, locked bool
 	fail          string
 	lockDelay     time.Duration
+	runs          int
 }
 
 func (d *engineStore) Open(string) (database.Driver, error) { return d, nil }
@@ -59,6 +61,9 @@ func (d *engineStore) Run(r io.Reader) error {
 	if err != nil {
 		return err
 	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.runs++
 	if d.fail != "" && strings.Contains(string(data), d.fail) {
 		return errors.New("expected scripted execution failure")
 	}
@@ -92,14 +97,15 @@ func TestUpstreamPartialStepsAndDeterministicStop(t *testing.T) {
 	}
 	d := &engineStore{version: -1}
 	m := newEngine(t, files, d)
-	m.Log = &stopLogger{stop: m.GracefulStop}
-	if err := m.Up(); err != nil {
+	if err := stopBetween(m, files); err != nil {
 		t.Fatal(err)
 	}
 	if v, dirty, _ := d.Version(); v != 0 || dirty {
 		t.Fatalf("stop after first migration=%d/%v", v, dirty)
 	}
-	m.Log = nil
+	if d.runs != 1 {
+		t.Fatalf("stop executed %d migration bodies, want 1", d.runs)
+	}
 	// GracefulStop latches in upstream; the runner resumes with a fresh migrator.
 	m = newEngine(t, files, d)
 	var short migrate.ErrShortLimit
@@ -109,6 +115,9 @@ func TestUpstreamPartialStepsAndDeterministicStop(t *testing.T) {
 	if v, dirty, _ := d.Version(); v != latestVersion || dirty {
 		t.Fatalf("partial progress=%d/%v", v, dirty)
 	}
+	if d.runs != 5 {
+		t.Fatalf("resume executed %d total migration bodies, want 5", d.runs)
+	}
 	if err := m.Steps(-99); !errors.As(err, &short) || short.Short != 94 {
 		t.Fatalf("down partial steps=%v/%d", err, short.Short)
 	}
@@ -117,6 +126,45 @@ func TestUpstreamPartialStepsAndDeterministicStop(t *testing.T) {
 	}
 	if v, _, _ := d.Version(); v != -1 {
 		t.Fatalf("absent target advanced version=%d", v)
+	}
+}
+
+func TestStopBetweenReleasesBuffersAndLock(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		name := "stopped"
+		if fail {
+			name = "execution-failed"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				p, err := profileFor(driverDM, modePG)
+				if err != nil {
+					t.Fatal(err)
+				}
+				d := &engineStore{version: -1}
+				if fail {
+					d.fail = "CREATE TABLE mp_items"
+				}
+				m := newEngine(t, fstest.MapFS{}, d)
+				err = stopBetween(m, p.FS)
+				if fail && (err == nil || !strings.Contains(err.Error(), "expected scripted execution failure")) {
+					t.Fatalf("execution failure lost: %v", err)
+				}
+				if !fail && err != nil {
+					t.Fatal(err)
+				}
+				if version, dirty, err := d.Version(); err != nil || version != 0 || dirty != fail || d.runs != 1 {
+					t.Fatalf("after stop: version=%d dirty=%v runs=%d err=%v", version, dirty, d.runs, err)
+				}
+				if err := d.Lock(); err != nil {
+					t.Fatalf("stop retained lock: %v", err)
+				}
+				if err := d.Unlock(); err != nil {
+					t.Fatal(err)
+				}
+				// The bubble cannot finish while an unread migration buffer is blocked.
+			})
+		})
 	}
 }
 
