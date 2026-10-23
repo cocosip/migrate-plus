@@ -1,0 +1,2 @@
+DROP SEQUENCE mp_seq;
+DROP TABLE mp_items PURGE;

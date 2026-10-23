@@ -67,6 +67,10 @@ before constructing drivers; a shorter driver statement timeout still applies.
 
 ## Library integration
 
+For repeatable real-server regression after driver changes, use the repository's
+[configurable migration test program](docs/MIGRATION_TESTING.md). It selects a
+database/mode and an explicitly disposable schema from JSON configuration.
+
 Consumers use the upstream library directly:
 
 ```go

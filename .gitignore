@@ -42,3 +42,6 @@ Thumbs.db
 .zcode/
 docs/superpowers/
 .superpowers/
+targets.local.json
+targets.*.local.json
+migration-report*.json

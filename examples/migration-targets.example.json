@@ -1,0 +1,103 @@
+{
+  "targets": [
+    {
+      "name": "oracle-oracle",
+      "driver": "oracle",
+      "mode": "oracle",
+      "schema": "MP_TEST",
+      "dsn_env": "MIGRATE_TEST_ORACLE_ORACLE",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "dm-native",
+      "driver": "dm",
+      "mode": "native",
+      "schema": "MP_TEST",
+      "dsn_env": "MIGRATE_TEST_DM_NATIVE",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "dm-oracle",
+      "driver": "dm",
+      "mode": "oracle",
+      "schema": "MP_TEST",
+      "dsn_env": "MIGRATE_TEST_DM_ORACLE",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "dm-mysql",
+      "driver": "dm",
+      "mode": "mysql",
+      "schema": "MP_TEST",
+      "dsn_env": "MIGRATE_TEST_DM_MYSQL",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "dm-pg",
+      "driver": "dm",
+      "mode": "pg",
+      "schema": "MP_TEST",
+      "dsn_env": "MIGRATE_TEST_DM_PG",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "gaussdb-a",
+      "driver": "gaussdb",
+      "mode": "a",
+      "schema": "mp_test",
+      "dsn_env": "MIGRATE_TEST_GAUSSDB_A",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "gaussdb-pg",
+      "driver": "gaussdb",
+      "mode": "pg",
+      "schema": "mp_test",
+      "dsn_env": "MIGRATE_TEST_GAUSSDB_PG",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "opengauss-a",
+      "driver": "opengauss",
+      "mode": "a",
+      "schema": "mp_test",
+      "dsn_env": "MIGRATE_TEST_OPENGAUSS_A",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "opengauss-pg",
+      "driver": "opengauss",
+      "mode": "pg",
+      "schema": "mp_test",
+      "dsn_env": "MIGRATE_TEST_OPENGAUSS_PG",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "oceanbase-mysql",
+      "driver": "oceanbase",
+      "mode": "mysql",
+      "schema": "mp_test",
+      "dsn_env": "MIGRATE_TEST_OCEANBASE_MYSQL",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    },
+    {
+      "name": "oceanbase-oracle",
+      "driver": "oceanbase",
+      "mode": "oracle",
+      "schema": "MP_TEST",
+      "dsn_env": "MIGRATE_TEST_OCEANBASE_ORACLE",
+      "timeout_seconds": 1800,
+      "statement_timeout_seconds": 15
+    }
+  ]
+}

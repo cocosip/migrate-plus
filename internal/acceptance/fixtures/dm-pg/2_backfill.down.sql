@@ -1,0 +1,1 @@
+ALTER TABLE mp_items DROP COLUMN note;

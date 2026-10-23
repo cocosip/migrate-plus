@@ -1,0 +1,2 @@
+CREATE TABLE mp_items(id INTEGER PRIMARY KEY, name VARCHAR(200) NOT NULL);
+INSERT INTO mp_items(id,name) VALUES(1,'seed');
