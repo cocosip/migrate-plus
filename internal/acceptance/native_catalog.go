@@ -26,8 +26,13 @@ func (c *connection) identity(ctx context.Context) (serverInfo, string, string, 
 			return info, "", "", fmt.Errorf("server does not identify as Oracle Database")
 		}
 		info.Mode = driverOracle
+		containerKey := "CON_NAME"
+		if oraclePre12(info.Version) {
+			// Multitenant container names were introduced in Oracle 12c.
+			containerKey = "DB_NAME"
+		}
 		var count int
-		err = c.conn.QueryRowContext(ctx, `SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA'), SYS_CONTEXT('USERENV','SESSION_USER'), SYS_CONTEXT('USERENV','DB_UNIQUE_NAME'), SYS_CONTEXT('USERENV','CON_NAME'), SYS_CONTEXT('USERENV','SERVER_HOST'), (SELECT COUNT(*) FROM SESSION_ROLES WHERE ROLE IN ('DBA','SYSDBA')) FROM dual`).Scan(&info.Schema, &info.User, &info.Database, &tenant, &server, &count)
+		err = c.conn.QueryRowContext(ctx, `SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA'), SYS_CONTEXT('USERENV','SESSION_USER'), SYS_CONTEXT('USERENV','DB_UNIQUE_NAME'), SYS_CONTEXT('USERENV','`+containerKey+`'), SYS_CONTEXT('USERENV','SERVER_HOST'), (SELECT COUNT(*) FROM SESSION_ROLES WHERE ROLE IN ('DBA','SYSDBA')) FROM dual`).Scan(&info.Schema, &info.User, &info.Database, &tenant, &server, &count)
 		if err != nil {
 			return info, "", "", err
 		}
@@ -81,6 +86,10 @@ func (c *connection) identity(ctx context.Context) (serverInfo, string, string, 
 		return info, "", "", fmt.Errorf("server identity is unavailable")
 	}
 	return info, server, tenant, nil
+}
+
+func oraclePre12(version string) bool {
+	return strings.Contains(version, "Release 10.") || strings.Contains(version, "Release 11.")
 }
 
 func (c *connection) endpoint() string {

@@ -103,6 +103,38 @@ func TestNativeIdentityRejectsModeSchemaProductAndAdmin(t *testing.T) {
 	}
 }
 
+func TestNativeOracleIdentityUsesVersionAppropriateContainer(t *testing.T) {
+	for _, tc := range []struct{ version, key string }{
+		{"10.2.0.5.0", "DB_NAME"},
+		{"11.2.0.4.0", "DB_NAME"},
+		{"12.1.0.2.0", "CON_NAME"},
+		{"19.3.0.0.0", "CON_NAME"},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = db.Close() }()
+			conn, err := db.Conn(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = conn.Close() }()
+			c := &connection{conn: conn, target: Target{Driver: driverOracle, Mode: driverOracle, Schema: nativeTestDisposable}}
+			mock.ExpectQuery(`SELECT BANNER FROM V\$VERSION`).WillReturnRows(sqlmock.NewRows([]string{"banner"}).AddRow("Oracle Database Enterprise Edition Release " + tc.version))
+			mock.ExpectQuery("SELECT SYS_CONTEXT.*'" + tc.key + "'").WillReturnRows(sqlmock.NewRows([]string{"schema", "user", "database", "container", "server", "admin"}).AddRow(nativeTestDisposable, "worker", "testdb", "test-container", "test-host", 0))
+			info, server, container, err := c.identity(context.Background())
+			if err != nil || info.Database != "testdb" || server != "test-host" || container != "test-container" {
+				t.Fatalf("identity=%+v server=%q container=%q: %v", info, server, container, err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestNativePeerRequiresSameServerDatabaseTenant(t *testing.T) {
 	c := &connection{target: Target{Driver: driverOceanBase, Mode: modeMySQL}, info: serverInfo{Schema: modeA, Database: "db"}, server: "one", tenant: "1001"}
 	other := *c
