@@ -122,7 +122,14 @@ func nativeTypes(p profile) []typeCase {
 		c.ID += ".null"
 		c.Update, c.Updated = c.Insert, c.Expected
 		c.Insert, c.Expected = sqlNull, nullValue
-		c.Query = "SELECT CASE WHEN v IS NULL THEN '<NULL>' ELSE (" + c.Query + ") END FROM mp_type WHERE id=1"
+		marker := "'<NULL>'"
+		if p.Family == driverOracle {
+			switch name, _, _ := strings.Cut(c.DDL, "("); name {
+			case "NCHAR", typeNVarchar2, "NCLOB":
+				marker = "N'<NULL>'"
+			}
+		}
+		c.Query = "SELECT CASE WHEN v IS NULL THEN " + marker + " ELSE (" + c.Query + ") END FROM mp_type WHERE id=1"
 		cases = append(cases, c)
 	}
 	declareMetadataAliases(p, cases)
@@ -292,12 +299,12 @@ func oracleTypes(cases *[]typeCase, add addType, conditional conditionalType, p 
 	add("interval.day-second", "INTERVAL DAY(4) TO SECOND(6)", "INTERVAL DAY(4) TO SECOND(6)", "INTERVAL '-1234 02:03:04.123456' DAY(4) TO SECOND(6)", "INTERVAL '0 00:00:00' DAY TO SECOND", "CASE WHEN v=INTERVAL '-1234 02:03:04.123456' DAY(4) TO SECOND(6) THEN 'negative-fractional' WHEN v=INTERVAL '0 00:00:00' DAY TO SECOND THEN 'zero' ELSE 'MISMATCH' END", "negative-fractional", "zero")
 	add("structured.object", "mp_native_type", "mp_native_type", "mp_native_type(1,'first')", "mp_native_type(2,'second')", "'placeholder'", "1:first", "2:second")
 	last := &(*cases)[len(*cases)-1]
-	last.Setup = "CREATE TYPE mp_native_type AS OBJECT(n NUMBER(10),s VARCHAR2(20));"
+	last.Setup = "CREATE TYPE mp_native_type AS OBJECT(n NUMBER(10),s VARCHAR2(20));\n/\n"
 	last.Teardown = dropNativeType
 	last.Query = "SELECT TO_CHAR(t.v.n)||':'||t.v.s FROM mp_type t WHERE id=1"
 	add("structured.collection", "mp_native_type", "mp_native_type", "mp_native_type(1,2)", "mp_native_type(3)", "'placeholder'", "2", "1")
 	last = &(*cases)[len(*cases)-1]
-	last.Setup = "CREATE TYPE mp_native_type AS VARRAY(10) OF NUMBER(10);"
+	last.Setup = "CREATE TYPE mp_native_type AS VARRAY(10) OF NUMBER(10);\n/\n"
 	last.Teardown = dropNativeType
 	last.Query = "SELECT TO_CHAR(COUNT(*)) FROM mp_type t,TABLE(t.v) n WHERE t.id=1"
 	for _, item := range []struct{ id, name, reason string }{
