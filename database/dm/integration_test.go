@@ -396,7 +396,7 @@ func integrationCrossSchema(t *testing.T, raw string) {
 	if first.schemaID == other.schemaID {
 		t.Fatal("cross-schema test requires two distinct schemas")
 	}
-	mustExec(t, first, "CREATE TABLE migrate_plus_external(id BIGINT)")
+	mustExec(t, first, "CREATE TABLE migrate_plus_external(id BIGINT PRIMARY KEY)")
 	mustExec(t, first, "INSERT INTO migrate_plus_external VALUES(1)")
 	mustExec(t, other, "CREATE TABLE migrate_plus_sentinel(id BIGINT)")
 	mustExec(t, other, "INSERT INTO migrate_plus_sentinel VALUES(7)")
@@ -411,6 +411,15 @@ func integrationCrossSchema(t *testing.T, raw string) {
 	assertCount(t, other, "migrate_plus_external_view", 1)
 	assertCount(t, other, "migrate_plus_sentinel", 1)
 	mustExec(t, other, "DROP VIEW migrate_plus_external_view RESTRICT")
+	mustExec(t, other, `CREATE TABLE migrate_plus_external_child(id BIGINT REFERENCES `+quoteIdentifier(first.schema)+`."MIGRATE_PLUS_EXTERNAL"(id))`)
+	t.Cleanup(func() { _ = other.exec("DROP TABLE IF EXISTS migrate_plus_external_child RESTRICT") })
+	if err := first.Drop(); err == nil || !strings.Contains(err.Error(), "dependencies from other schemas") {
+		t.Fatalf("Drop did not reject the external foreign key before DDL: %v", err)
+	}
+	assertCount(t, first, first.config.MigrationsTable, 0)
+	assertCount(t, first, "migrate_plus_external", 1)
+	assertCount(t, other, "migrate_plus_sentinel", 1)
+	mustExec(t, other, "DROP TABLE migrate_plus_external_child RESTRICT")
 	if err := first.Drop(); err != nil {
 		t.Fatal(err)
 	}

@@ -30,6 +30,28 @@ func TestNegativeAssertionDoesNotAcceptWrongError(t *testing.T) {
 	}
 }
 
+func TestDMNativeErrorClassification(t *testing.T) {
+	for _, tc := range []struct{ class, message string }{
+		{errorCheck, "Error -6604: 违反CHECK约束[CK]"},
+		{errorForeignKey, "Error -6607: 违反引用约束[FK]"},
+		{"object-exists", "Error -2116: 对象已存在"},
+		{"object-exists", "Error -2124: 对象[MP_HISTORY]已存在"},
+		{"overflow", "Error -6149: 数据转换丢失警告"},
+	} {
+		t.Run(tc.class+tc.message, func(t *testing.T) {
+			if err := expectError(errors.New(tc.message), tc.class); err != nil {
+				t.Fatal(err)
+			}
+			if expectError(errors.New("Error -5515: 没有权限"), tc.class) == nil {
+				t.Fatal("permission failure accepted as expected rejection")
+			}
+			if expectError(nil, tc.class) == nil {
+				t.Fatal("successful operation accepted as expected rejection")
+			}
+		})
+	}
+}
+
 func TestRedactionRemovesEncodedAndRawCredentials(t *testing.T) {
 	dsn := "oracle://u:p%40ss%2Bword@host/service?password=second%21"
 	clean := redactConnection("failed "+dsn+" p@ss+word second!", dsn)

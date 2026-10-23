@@ -61,6 +61,12 @@ for SQL restrictions, metadata privileges and DBMS_LOCK requirements. Object
 tests may additionally need CREATE TYPE/PROCEDURE/TRIGGER/SYNONYM/MATERIALIZED VIEW
 and native package execution privileges on the disposable account.
 
+For DM8, reading active INI parameters also requires `SELECT ANY DICTIONARY`.
+The native/Oracle test accounts additionally use `CREATE PACKAGE` for package
+fixtures, alongside CREATE SESSION/TABLE/VIEW/PROCEDURE/SEQUENCE/TRIGGER/SYNONYM/
+MATERIALIZED VIEW. These privileges can be granted directly without enabling DBA.
+Missing privileges remain failures; the runner does not grant them itself.
+
 ## Coverage and results
 
 [The coverage contract](MIGRATION_TEST_COVERAGE.md) describes the inventory. The
@@ -108,4 +114,4 @@ Local unit tests validate the command, safety checks, native adapters, fixtures
 and orchestration. They do not establish server compatibility. After driver or
 upstream changes, rerun the same selected disposable target and inspect failures
 and incomplete coverage as well as the process exit code. Real server validation
-remains pending until actual connections and prerequisites are supplied.
+is specific to the supplied server version and selected mode.

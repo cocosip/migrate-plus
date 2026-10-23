@@ -3,6 +3,7 @@ package dm
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -17,7 +18,7 @@ func dependencyRows() *sqlmock.Rows { return sqlmock.NewRows([]string{"id", "ref
 func foreignKeyRows() *sqlmock.Rows { return sqlmock.NewRows([]string{"table", "constraint"}) }
 
 func expectDropPreflight(mock sqlmock.Sqlmock, external int) {
-	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM SYS.SYSDEPENDENCIES`).WithArgs(101, 101).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(external))
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM \(`).WithArgs(101, 101).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(external))
 }
 
 func expectEmptyDropOrder(mock sqlmock.Sqlmock) {
@@ -60,6 +61,15 @@ func TestDropRejectsCrossSchemaDependenciesBeforeDDL(t *testing.T) {
 	expectDropPreflight(mock, 1)
 	if err := d.Drop(); err == nil {
 		t.Fatal("accepted external dependency")
+	}
+}
+
+func TestDropChecksIncomingForeignKeysBeforeDDL(t *testing.T) {
+	d, mock := initializedDriver(t)
+	mock.ExpectQuery(`SELECT COUNT\(\*\).*FROM SYS.SYSCONS f.*referenced_index.ID = f.FINDEXID.*referenced.ID = referenced_index.PID`).
+		WithArgs(101, 101).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
+	if err := d.Drop(); err == nil || !strings.Contains(err.Error(), "dependencies from other schemas") {
+		t.Fatalf("external foreign key was not rejected before DDL: %v", err)
 	}
 }
 

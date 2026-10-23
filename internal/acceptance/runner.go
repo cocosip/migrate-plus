@@ -381,9 +381,10 @@ func expectError(err error, class string) error {
 		"missing-object": {"ora-00942", "does not exist", "doesn't exist", "unknown table", "invalid table", "无效的表", "不存在"},
 		errorUnique:      {"ora-00001", "23505", "duplicate entry", "duplicate key", "unique constraint", "唯一"},
 		errorNull:        {"ora-01400", "23502", "cannot be null", "not-null constraint", "非空"},
-		errorForeignKey:  {"ora-02291", "23503", "foreign key constraint", "外键"},
-		errorCheck:       {"ora-02290", "23514", "check constraint", "检查约束"},
-		"overflow":       {"ora-01438", "22003", "out of range", "numeric field overflow", "超出", "精度"},
+		errorForeignKey:  {"ora-02291", "23503", "foreign key constraint", "外键", "引用约束"},
+		errorCheck:       {"ora-02290", "23514", "check constraint", "检查约束", "check约束"},
+		"object-exists":  {"error -2116:", "error -2124:"},
+		"overflow":       {"ora-01438", "22003", "out of range", "numeric field overflow", "超出", "精度", "error -6149:"},
 		"syntax":         {"ora-009", "42601", "syntax", "语法"},
 	}
 	for _, token := range matches[class] {

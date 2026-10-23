@@ -229,7 +229,10 @@ func (s *suite) historyTemporary() error {
 	}
 	switch s.profile.Family {
 	case driverDM:
-		expected = "Error -2116:"
+		if err := expectError(err, "object-exists"); err != nil {
+			return err
+		}
+		return s.nativeExec(s.dropTable(name))
 	case modePG:
 		expected = s.target.Driver + ": migration state must be a permanent ordinary table"
 	}
@@ -464,7 +467,7 @@ func (s *suite) scriptRejections() error {
 		{"/* unterminated", commentError},
 	}
 	if s.profile.Family != driverOracle {
-		scripts = append(scripts, struct{ sql, diagnostic string }{"CREATE TABLE mp_probe(id INTEGER); DELIMITER $$", commandError}, struct{ sql, diagnostic string }{"CREATE TABLE mp_probe(id INTEGER); COPY mp_probe FROM STDIN;", commandError})
+		scripts = append(scripts, struct{ sql, diagnostic string }{"CREATE TABLE mp_probe(id INTEGER); DELIMITER //", commandError}, struct{ sql, diagnostic string }{"CREATE TABLE mp_probe(id INTEGER); COPY mp_probe FROM STDIN;", commandError})
 	}
 	for _, script := range scripts {
 		if err := expectDiagnostic(s.exec(script.sql), script.diagnostic); err != nil {

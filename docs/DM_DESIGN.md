@@ -1,7 +1,7 @@
 # DM Driver Design
 
-Status: DM8 8.1.4.80 Oracle-mode lock and migration lifecycle verified; native Drop
-has a separate failing integration test (see [section 5](#lock-compatibility-finding)).
+Status: DM8 8.1.4.80 native/Oracle driver integration verified, including native
+Drop and cross-schema foreign-key refusal. Conditional acceptance gaps remain.
 This document extends [the project architecture](DESIGN.md). Connection examples,
 account setup and test commands belong to the [DM driver guide](../database/dm/README.md).
 
@@ -275,10 +275,16 @@ sequence, procedure, synonym and view behind because the Drop query's
 `PID = -1` filter excluded them. The filter now selects supported standalone
 objects by subtype regardless of PID, with event triggers included and
 table-level triggers still following their tables; re-verification on that
-build is still pending. The Drop policy and assertion are unchanged. The unprivileged test
+build was pending at that checkpoint. The Drop policy and assertion are unchanged. The unprivileged test
 account could not read INI parameters (-5730), which was treated as a permission
 error, not a communication error. Reproduction:
 `database/dm/lock_compatibility_test.go` with `MIGRATE_PLUS_DM_LOCK_PROBE_DSN`.
+
+The 2026-10-23 native/Oracle re-verification passed the driver integration suite,
+including the corrected Drop catalog, session locks, version/dirty state and
+cross-schema view/foreign-key refusal. Standalone acceptance also exercises
+ordinary materialized views and their generated backing-table cleanup. This
+does not establish prebuilt-container behavior or the remaining conditional types.
 
 ## 6. Version state and migration execution
 
@@ -397,6 +403,11 @@ boundary. Validate the complete supported-object dependency graph before any
 DDL, including local foreign-key removal, so a known cycle leaves constraints
 intact. Still re-query after materialized views to handle removed backing tables.
 Stop and report errors; no generic catch-and-ignore path.
+
+Incoming foreign keys require a separate `SYSCONS` path: `FINDEXID` identifies
+the referenced index, whose `SYSOBJECTS.PID` identifies the parent table. The
+verified build does not record these foreign keys in `SYSDEPENDENCIES`. Combine
+both dependency sources and reject references from other schemas before any DDL.
 
 Do not drop users, schemas, the database, grants, jobs, database links or global
 system packages. Do not silently claim complete schema removal for unsupported

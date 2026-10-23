@@ -78,10 +78,18 @@ func (d *Dm) checkDropOrder() error {
 }
 
 func (d *Dm) checkExternalDependencies() error {
-	query := `SELECT COUNT(*) FROM SYS.SYSDEPENDENCIES d
+	// Incoming foreign keys reference a parent index and are absent from SYSDEPENDENCIES.
+	query := `SELECT COUNT(*) FROM (
+SELECT referenced.SCHID AS REFERENCED_SCHEMA, dependent.SCHID AS DEPENDENT_SCHEMA FROM SYS.SYSDEPENDENCIES d
 JOIN SYS.SYSOBJECTS dependent ON dependent.ID = d.ID
 JOIN SYS.SYSOBJECTS referenced ON referenced.ID = d.REFED_ID
-WHERE referenced.SCHID = ? AND dependent.SCHID <> ?`
+UNION ALL
+SELECT referenced.SCHID, dependent.SCHID FROM SYS.SYSCONS f
+JOIN SYS.SYSOBJECTS dependent ON dependent.ID = f.TABLEID
+JOIN SYS.SYSOBJECTS referenced_index ON referenced_index.ID = f.FINDEXID
+JOIN SYS.SYSOBJECTS referenced ON referenced.ID = referenced_index.PID
+WHERE f.TYPE$ = 'F'
+) incoming WHERE REFERENCED_SCHEMA = ? AND DEPENDENT_SCHEMA <> ?`
 	return d.query(query, func(rows *sql.Rows) error {
 		var count int
 		if !rows.Next() {

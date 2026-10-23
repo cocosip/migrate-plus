@@ -8,6 +8,7 @@ import (
 const (
 	nativeTypeBit        = "BIT"
 	nativeTypeBlob       = "BLOB"
+	nativeTypeText       = "TEXT"
 	nativeTypeGeometry   = "GEOMETRY"
 	nativeTypeStructured = "structured"
 	dropNativeType       = "DROP TYPE mp_native_type;"
@@ -20,33 +21,28 @@ func nativeTypes(p profile) []typeCase {
 		cases = append(cases, typeCase{ID: id, Name: name, DDL: ddl, Insert: insert, Update: update, Query: "SELECT " + expression + " FROM mp_type WHERE id=1", Expected: expected, Updated: updated})
 	}
 	conditional := func(id, name, reason string) { cases = append(cases, typeCase{ID: id, Name: name, Reason: reason}) }
-	cast := func() string {
-		if p.Family == driverOracle {
-			return "TO_CHAR(v)"
-		}
-		if p.Family == modeMySQL {
-			return "CAST(v AS CHAR)"
-		}
-		return "CAST(v AS VARCHAR(200))"
-	}
+	cast := numericText(p)
 	integer := typeBigInt
 	if p.Family == driverOracle {
 		integer = typeNumber19
 	}
-	add("integer.above-2p53", integer, integer, "9007199254740993", "-9007199254740993", cast(), "9007199254740993", "-9007199254740993")
-	add("integer.zero-negative", integer, integer, "0", "-1", cast(), "0", "-1")
+	add("integer.above-2p53", integer, integer, "9007199254740993", "-9007199254740993", cast, "9007199254740993", "-9007199254740993")
+	add("integer.zero-negative", integer, integer, "0", "-1", cast, "0", "-1")
 	if p.Family == driverOracle {
-		add("integer.number-19", typeNumber19, typeNumber19, "-9223372036854775808", "9223372036854775807", cast(), "-9223372036854775808", "9223372036854775807")
+		add("integer.number-19", typeNumber19, typeNumber19, "-9223372036854775808", "9223372036854775807", cast, "-9223372036854775808", "9223372036854775807")
 	} else {
 		for _, width := range []struct{ id, ddl, min, max string }{{"smallint", typeSmallInt, "-32768", "32767"}, {"int", typeInteger, "-2147483648", "2147483647"}, {"bigint", typeBigInt, "-9223372036854775808", "9223372036854775807"}} {
-			add("integer."+width.id, width.ddl, width.ddl, width.min, width.max, cast(), width.min, width.max)
+			add("integer."+width.id, width.ddl, width.ddl, width.min, width.max, cast, width.min, width.max)
 		}
 	}
 	decimal := "DECIMAL(38,4)"
-	decimalRead := cast()
+	decimalRead := cast
 	if p.Family == driverOracle {
 		decimal = "NUMBER(38,4)"
 		decimalRead = "TO_CHAR(v,'FM" + strings.Repeat("9", 33) + "0D0000','NLS_NUMERIC_CHARACTERS = ''.,''')"
+	}
+	if p.Family == driverDM {
+		decimalRead = "TO_CHAR(v,'FM" + strings.Repeat("9", 33) + "0.0000')"
 	}
 	add("numeric.precision-38", decimal, decimal, "1234567890123456789012345678901234.5678", "-1234567890123456789012345678901234.5678", decimalRead, "1234567890123456789012345678901234.5678", "-1234567890123456789012345678901234.5678")
 	add("numeric.scale-zero", decimal, decimal, "0.0000", "-1.2300", decimalRead, "0.0000", "-1.2300")
@@ -79,7 +75,12 @@ func nativeTypes(p profile) []typeCase {
 	}
 	add("text.unicode", varchar, varchar, "'中文𐐷''\n;'", "'更新𐐷'", "v", "中文𐐷'\n;", "更新𐐷")
 	add("text.null", varchar, varchar, sqlNull, "'value'", "COALESCE(v,'<NULL>')", nullValue, "value")
-	add("text.empty", varchar, varchar, "''", "'x'", "CASE WHEN v IS NULL THEN '<NULL>' WHEN LENGTH(v)=0 THEN '<EMPTY>' ELSE v END", emptyText(p), "x")
+	emptyRead := "CASE WHEN v IS NULL THEN '<NULL>' WHEN LENGTH(v)=0 THEN '<EMPTY>' ELSE v END"
+	if p.Family == driverDM {
+		// DM LENGTH('') is NULL even when native mode preserves the empty string.
+		emptyRead = "CASE WHEN v IS NULL THEN '<NULL>' WHEN v='' THEN '<EMPTY>' ELSE v END"
+	}
+	add("text.empty", varchar, varchar, "''", "'x'", emptyRead, emptyText(p), "x")
 	add("text.length-boundary", "VARCHAR(4)", "VARCHAR(4)", "'abcd'", "'wxyz'", "v", "abcd", "wxyz")
 	charLength := "LENGTH(v)=4"
 	if p.Family == modePG {
@@ -148,7 +149,26 @@ func declareMetadataAliases(p profile, cases []typeCase) {
 			c.MetadataTypes = []string{typeFloat, typeDouble}
 		case p.Mode == modeA && c.DDL == typeDate:
 			c.MetadataTypes = []string{typeDate, typeTimestamp}
+		case p.Driver == driverDM && p.Mode == driverOracle && c.DDL == typeDate:
+			c.MetadataTypes = []string{typeDate, typeTimestamp}
+		case p.Family == driverDM && c.DDL == "NCLOB":
+			c.MetadataTypes = []string{nativeTypeText}
+		case p.Family == driverDM && c.DDL == "RAW(4)":
+			c.MetadataTypes = []string{"VARBINARY"}
+		case p.Family == driverDM && c.DDL == "TIMESTAMP(6) WITH TIME ZONE":
+			c.MetadataTypes = []string{"DATETIME WITH TIME ZONE"}
 		}
+	}
+}
+
+func numericText(p profile) string {
+	switch p.Family {
+	case driverOracle:
+		return "TO_CHAR(v)"
+	case modeMySQL:
+		return "CAST(v AS CHAR)"
+	default:
+		return "CAST(v AS VARCHAR(200))"
 	}
 }
 
@@ -177,7 +197,7 @@ func addLargeAndBinary(p profile, add addType) {
 	chunk := strings.Repeat("中文𐐷", 100)
 	literal := "'" + strings.Repeat(chunk, 120) + "'"
 	updatedLiteral := "'" + strings.Repeat("更新𐐷", 12000) + "'"
-	lobType := "TEXT"
+	lobType := nativeTypeText
 	equalInitial, equalUpdated := "v="+literal, "v="+updatedLiteral
 	if p.Family == modeMySQL {
 		lobType = "LONGTEXT"
@@ -212,7 +232,7 @@ type conditionalType func(id, name, reason string)
 
 func pgTypes(cases *[]typeCase, add addType, conditional conditionalType) {
 	add("numeric.numeric-alias", "NUMERIC(38,4)", "NUMERIC(38,4)", "1.2300", "-2.3400", "CAST(v AS VARCHAR(100))", "1.2300", "-2.3400")
-	add("lob.text", "TEXT", "TEXT", "'中文 text'", "'更新 text'", "v", "中文 text", "更新 text")
+	add("lob.text", nativeTypeText, nativeTypeText, "'中文 text'", "'更新 text'", "v", "中文 text", "更新 text")
 	add("binary.zero-ff", "BYTEA", "BYTEA", "decode('00ff0100','hex')", "decode('ff0001ff','hex')", "upper(encode(v,'hex'))", "00FF0100", "FF0001FF")
 	add("binary.empty-null", "BYTEA", "BYTEA", "decode('','hex')", sqlNull, "CASE WHEN v IS NULL THEN '<NULL>' ELSE CAST(octet_length(v) AS VARCHAR(20)) END", "0", nullValue)
 	add("temporal.date", typeDate, typeDate, "DATE '2000-02-29'", "DATE '1969-12-31'", "to_char(v,'YYYY-MM-DD')", "2000-02-29", "1969-12-31")
@@ -250,7 +270,7 @@ func mysqlTypes(_ *[]typeCase, add addType, conditional conditionalType) {
 	add("numeric.precision-65", "DECIMAL(65,4)", "DECIMAL(65,4)", "1234567890123456789012345678901234567890123456789012345678901.2300", "-1234567890123456789012345678901234567890123456789012345678901.2300", "CAST(v AS CHAR)", "1234567890123456789012345678901234567890123456789012345678901.2300", "-1234567890123456789012345678901234567890123456789012345678901.2300")
 	add("boolean.boolean-alias", typeBoolean, typeBoolean, "FALSE", "TRUE", "CASE WHEN v=1 THEN 'true' ELSE 'false' END", "false", "true")
 	add("boolean.bit-eight", "BIT(8)", "BIT(8)", "b'00000000'", "b'11111111'", "CAST(v+0 AS CHAR)", "0", "255")
-	for _, name := range []string{"TINYTEXT", "TEXT", "MEDIUMTEXT", "LONGTEXT"} {
+	for _, name := range []string{"TINYTEXT", nativeTypeText, "MEDIUMTEXT", "LONGTEXT"} {
 		add("lob."+typeID(name), name, name, "'中文 LOB'", "'更新 LOB'", "v", "中文 LOB", "更新 LOB")
 	}
 	for _, name := range []string{"BINARY(4)", "VARBINARY(4)", "TINYBLOB", nativeTypeBlob, "MEDIUMBLOB", "LONGBLOB"} {
@@ -326,9 +346,13 @@ func oracleTypes(cases *[]typeCase, add addType, conditional conditionalType, p 
 
 func dmTypes(add addType, conditional conditionalType, p profile) {
 	for _, name := range []string{"NUMERIC(38,4)", "NUMBER(38,4)"} {
-		add("numeric."+typeID(name), name, name, "1.2300", "-2.3400", "CAST(v AS VARCHAR(100))", "1.2300", "-2.3400")
+		add("numeric."+typeID(name), name, name, "1.2300", "-2.3400", "TO_CHAR(v,'FM9999999999999999999999999999999990.0000')", "1.2300", "-2.3400")
 	}
-	add("boolean.boolean-alias", typeBoolean, typeBoolean, "0", "1", "CASE WHEN v=1 THEN 'true' ELSE 'false' END", "false", "true")
+	if p.Mode == modeNative || p.Mode == driverOracle {
+		conditional("boolean.boolean-alias", typeBoolean, "DM8 native/Oracle modes reject SQL BOOLEAN with -6119; BIT is tested separately")
+	} else {
+		add("boolean.boolean-alias", typeBoolean, typeBoolean, "0", "1", "CASE WHEN v=1 THEN 'true' ELSE 'false' END", "false", "true")
+	}
 	add("binary.zero-ff", "VARBINARY(4)", "VARBINARY(4)", "HEXTORAW('00FF0100')", "HEXTORAW('FF0001FF')", "RAWTOHEX(v)", "00FF0100", "FF0001FF")
 	add("binary.binary", "BINARY(4)", "BINARY(4)", "HEXTORAW('00FF0100')", "HEXTORAW('FF0001FF')", "RAWTOHEX(v)", "00FF0100", "FF0001FF")
 	add("binary.blob", nativeTypeBlob, nativeTypeBlob, "HEXTORAW('00FF0100')", "HEXTORAW('FF0001FF')", "RAWTOHEX(DBMS_LOB.SUBSTR(v,4,1))", "00FF0100", "FF0001FF")
@@ -336,8 +360,16 @@ func dmTypes(add addType, conditional conditionalType, p profile) {
 	add("temporal.date", typeDate, typeDate, "DATE '2000-02-29'", "DATE '1969-12-31'", "TO_CHAR(v,'YYYY-MM-DD')", "2000-02-29", "1969-12-31")
 	add("temporal.time", "TIME(6)", "TIME(6)", "TIME '23:59:59.123456'", "TIME '00:00:00.000001'", "TO_CHAR(v,'HH24:MI:SS.FF6')", "23:59:59.123456", "00:00:00.000001")
 	add("temporal.timestamp", "TIMESTAMP(6)", "TIMESTAMP(6)", "TIMESTAMP '2000-02-29 23:59:59.123456'", "TIMESTAMP '1969-12-31 00:00:00.000001'", "TO_CHAR(v,'YYYY-MM-DD HH24:MI:SS.FF6')", "2000-02-29 23:59:59.123456", "1969-12-31 00:00:00.000001")
+	add("text.dm-varchar2", typeVarchar2, "VARCHAR2(40)", "'中文𐐷'", "'更新𐐷'", "v", "中文𐐷", "更新𐐷")
+	add("text.dm-nchar", "NCHAR", "NCHAR(4)", "N'中文'", "N'更新'", "TRIM(v)", "中文", "更新")
+	add("text.dm-nvarchar2", typeNVarchar2, "NVARCHAR2(40)", "N'中文𐐷'", "N'更新𐐷'", "v", "中文𐐷", "更新𐐷")
+	add("lob.dm-nclob", "NCLOB", "NCLOB", "N'中文𐐷 LOB'", "N'更新𐐷 LOB'", "DBMS_LOB.SUBSTR(v,100,1)", "中文𐐷 LOB", "更新𐐷 LOB")
+	add("binary.dm-raw", "RAW", "RAW(4)", "HEXTORAW('00FF0100')", "HEXTORAW('FF0001FF')", "RAWTOHEX(v)", "00FF0100", "FF0001FF")
+	add("timezone.dm-timestamp-with-time-zone", "TIMESTAMP WITH TIME ZONE", "TIMESTAMP(6) WITH TIME ZONE", "TO_TIMESTAMP_TZ('2000-02-29 23:59:59.123456 +08:00','YYYY-MM-DD HH24:MI:SS.FF6 TZH:TZM')", "TO_TIMESTAMP_TZ('1969-12-31 00:00:00.000001 -03:00','YYYY-MM-DD HH24:MI:SS.FF6 TZH:TZM')", "TO_CHAR(SYS_EXTRACT_UTC(v),'YYYY-MM-DD HH24:MI:SS.FF6')", "2000-02-29 15:59:59.123456", "1969-12-31 03:00:00.000001")
+	add("interval.dm-interval-year-to-month", "INTERVAL YEAR TO MONTH", "INTERVAL YEAR(4) TO MONTH", "INTERVAL '-1234-11' YEAR(4) TO MONTH", "INTERVAL '0-0' YEAR TO MONTH", "CASE WHEN v=INTERVAL '-1234-11' YEAR(4) TO MONTH THEN 'negative-1234-11' WHEN v=INTERVAL '0-0' YEAR TO MONTH THEN 'zero' ELSE 'MISMATCH' END", "negative-1234-11", "zero")
+	add("interval.dm-interval-day-to-second", "INTERVAL DAY TO SECOND", "INTERVAL DAY(4) TO SECOND(6)", "INTERVAL '-1234 02:03:04.123456' DAY(4) TO SECOND(6)", "INTERVAL '0 00:00:00' DAY TO SECOND", "CASE WHEN v=INTERVAL '-1234 02:03:04.123456' DAY(4) TO SECOND(6) THEN 'negative-fractional' WHEN v=INTERVAL '0 00:00:00' DAY TO SECOND THEN 'zero' ELSE 'MISMATCH' END", "negative-fractional", "zero")
 	for _, item := range []struct{ family, name string }{
-		{typeText, typeVarchar2}, {typeText, "NCHAR"}, {typeText, typeNVarchar2}, {"lob", "NCLOB"}, {"binary", "RAW"}, {"binary", "LONG RAW"}, {"timezone", "TIMESTAMP WITH TIME ZONE"}, {"timezone", "TIMESTAMP WITH LOCAL TIME ZONE"}, {"interval", "INTERVAL YEAR TO MONTH"}, {"interval", "INTERVAL DAY TO SECOND"}, {nativeTypeStructured, "JSON"}, {nativeTypeStructured, "JSONB"}, {nativeTypeStructured, "XMLTYPE"}, {nativeTypeStructured, "UUID"}, {nativeTypeStructured, "ARRAY"}, {nativeTypeStructured, "OBJECT"}, {nativeTypeStructured, "CLASS"}, {nativeTypeStructured, "ENUM"}, {nativeTypeStructured, "DOMAIN"}, {nativeTypeStructured, nativeTypeGeometry},
+		{"binary", "LONG RAW"}, {"timezone", "TIMESTAMP WITH LOCAL TIME ZONE"}, {nativeTypeStructured, "JSON"}, {nativeTypeStructured, "JSONB"}, {nativeTypeStructured, "XMLTYPE"}, {nativeTypeStructured, "UUID"}, {nativeTypeStructured, "ARRAY"}, {nativeTypeStructured, "OBJECT"}, {nativeTypeStructured, "CLASS"}, {nativeTypeStructured, "ENUM"}, {nativeTypeStructured, "DOMAIN"}, {nativeTypeStructured, nativeTypeGeometry},
 	} {
 		conditional(item.family+".dm-"+typeID(item.name), item.name, "Requires DM native catalog/version support in server mode "+p.Mode+"; no corresponding emulated-product syntax is inferred")
 	}

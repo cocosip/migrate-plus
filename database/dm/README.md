@@ -11,9 +11,9 @@ and the [project architecture](../../docs/DESIGN.md) for shared contracts.
 The target is DM8 across multiple builds. Initialization identifies the product
 from `V$VERSION` and reads the actual schema, case sensitivity and effective
 `BACKSLASH_ESCAPE`. Missing functions, privileges or unsupported settings fail
-initialization. Lock and migration lifecycle tests have been run on DM8
-8.1.4.80 in Oracle compatibility mode. This does not certify every feature:
-the native Drop test exposed a separate catalog-filter problem. See the
+initialization. Driver integration tests have passed on DM8 8.1.4.80 in native
+and Oracle compatibility modes, including native Drop and incoming cross-schema
+foreign-key refusal. Conditional acceptance coverage remains incomplete. See the
 [lock compatibility finding](../../docs/DM_DESIGN.md#lock-compatibility-finding).
 
 `BACKSLASH_ESCAPE` is a static INI parameter. Initialization reads its active
@@ -26,8 +26,8 @@ neither compatibility mode nor a default value substitutes for this check.
 
 | Server `COMPATIBLE_MODE` | Target | Real-server verification |
 |---|---|---|
-| 0 | Native DM | Not run |
-| 2 | Oracle compatibility | Lock/migration lifecycle passed on 8.1.4.80; native Drop test failed |
+| 0 | Native DM | Driver integration passed on 8.1.4.80; conditional acceptance gaps remain |
+| 2 | Oracle compatibility | Driver integration passed on 8.1.4.80; conditional acceptance gaps remain |
 | 4 | MySQL compatibility | Not run |
 | 7 | PostgreSQL compatibility | Not run |
 
@@ -179,7 +179,9 @@ Foreign keys in that schema are removed first; materialized views are removed
 before re-reading remaining objects to account for backing tables.
 
 External dependencies and cycles in the complete supported-object graph are
-checked before destructive DDL, including foreign-key removal. Unresolved
+checked before destructive DDL, including foreign-key removal. Incoming foreign
+keys are read through `SYSCONS.FINDEXID` and the referenced index's parent table;
+they are not present in `SYSDEPENDENCIES` on the verified build. Unresolved
 object cycles require explicit cleanup SQL; local foreign-key cycles are removed
 by dropping their constraints. No `CASCADE`, Oracle `PURGE` or `FORCE` is used.
 Catalog/DDL errors stop processing; earlier DDL may have committed. Users,
@@ -204,7 +206,7 @@ across transactions/DDL, timeout termination, routines and native Drop ordering.
 Set `MIGRATE_PLUS_DM_TEST_MATERIALIZED=1` to also test ordinary/prebuilt
 materialized views on builds/accounts supporting them. Set
 `MIGRATE_PLUS_DM_OTHER_TEST_URL` to another disposable schema on the same server
-with cross-schema SELECT privileges to test external dependency refusal and
+with cross-schema SELECT/REFERENCES privileges to test external dependency refusal and
 sentinel preservation. Missing optional prerequisites are reported as skipped.
 
 Run against an older and a recent DM8 build in each target mode; record exact

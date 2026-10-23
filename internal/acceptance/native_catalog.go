@@ -128,8 +128,12 @@ AND object_type NOT IN ('INDEX','LOB','PACKAGE BODY','TYPE BODY')
 AND object_name NOT IN (SELECT table_name FROM ALL_NESTED_TABLES WHERE owner = :2)`
 		args = []any{c.info.Schema, c.info.Schema}
 	case driverDM:
+		// INFO3 bit 21 plus the owning materialized-view dependency identifies backing tables.
 		query = `SELECT o.NAME, o.SUBTYPE$ FROM SYS.SYSOBJECTS o WHERE o.SCHID = CURRENT_SCHID() AND o.TYPE$ = 'SCHOBJ'
-AND (o.PID = -1 OR o.SUBTYPE$ IN ('VIEW','SEQ','SYNOM','PKG','PROC','TYPE','CLASS') OR (o.SUBTYPE$ = 'TRIG' AND BITAND(o.INFO1,2) = 0))`
+AND (o.PID = -1 OR o.SUBTYPE$ IN ('VIEW','SEQ','SYNOM','PKG','PROC','TYPE','CLASS') OR (o.SUBTYPE$ = 'TRIG' AND BITAND(o.INFO1,2) = 0))
+AND NOT (o.SUBTYPE$ = 'UTAB' AND BITAND(o.INFO3,2097152) <> 0 AND EXISTS (
+SELECT 1 FROM SYS.SYSDEPENDENCIES d JOIN SYS.SYSOBJECTS mv ON mv.ID = d.ID
+WHERE d.REFED_ID = o.ID AND d.TYPE$ = 'MATERIALIZED VIEW' AND mv.SCHID = o.SCHID))`
 	case driverGaussDB, driverOpenGauss:
 		query = `SELECT c.relname, CASE c.relkind WHEN 'r' THEN 'TABLE' WHEN 'p' THEN 'TABLE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'S' THEN 'SEQUENCE' WHEN 'L' THEN 'SEQUENCE' ELSE 'UNSUPPORTED' END
 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relkind NOT IN ('i','I','t','c')

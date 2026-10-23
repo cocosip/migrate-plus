@@ -59,3 +59,21 @@ func TestTypeMetadataRejectsWrongTypeAndLostPrecision(t *testing.T) {
 		t.Fatal("timezone metadata distinction lost")
 	}
 }
+
+func TestDMOracleDateMetadataDoesNotChangeOtherModes(t *testing.T) {
+	for _, mode := range []string{modeNative, driverOracle, modeMySQL, modePG} {
+		p, err := profileFor(driverDM, mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range p.Types {
+			if tc.ID != "temporal.date" {
+				continue
+			}
+			column := columnInfo{Type: typeTimestamp, Nullable: true}
+			if err := verifyTypeMetadata(tc, column); (err == nil) != (mode == driverOracle) {
+				t.Errorf("%s DATE metadata: %v", mode, err)
+			}
+		}
+	}
+}
