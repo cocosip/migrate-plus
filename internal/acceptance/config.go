@@ -30,13 +30,13 @@ func readConfig(reader io.Reader) (configuration, error) {
 		return configuration{}, fmt.Errorf("configuration exceeds 1 MiB")
 	}
 	if err := uniqueJSON(json.NewDecoder(strings.NewReader(string(data)))); err != nil {
-		return configuration{}, fmt.Errorf("invalid or duplicate JSON fields")
+		return configuration{}, fmt.Errorf("invalid or duplicate JSON fields: %w", err)
 	}
 	var cfg configuration
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&cfg); err != nil {
-		return cfg, fmt.Errorf("invalid configuration fields")
+		return cfg, fmt.Errorf("invalid configuration fields: %w", err)
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return cfg, fmt.Errorf("configuration must contain one JSON value")

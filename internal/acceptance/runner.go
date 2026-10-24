@@ -29,11 +29,15 @@ type suite struct {
 	m        *migrate.Migrate
 	tempDirs []string
 	unsafe   bool
+	// redactions holds every configured target's resolved DSN, captured once,
+	// so recorded error details never repeat environment lookups.
+	redactions []string
 }
 
 // Run executes a selected target. It never reads integration-test environment URLs.
 func Run(ctx context.Context, target Target, all []Target, emit func(TargetReport)) TargetReport {
 	s := &suite{ctx: ctx, target: target, all: all, emit: emit, report: TargetReport{Name: target.Name, Profile: target.Driver + "-" + target.Mode}}
+	s.resolveRedactions()
 	var err error
 	s.profile, err = profileFor(target.Driver, target.Mode)
 	if err != nil {
@@ -77,6 +81,14 @@ func statusFor(err error) Status {
 	return Pass
 }
 
+func (s *suite) resolveRedactions() {
+	for _, t := range s.all {
+		if dsn, err := t.resolveDSN(); err == nil {
+			s.redactions = append(s.redactions, dsn)
+		}
+	}
+}
+
 func (s *suite) record(id string, status Status, err error, duration time.Duration) {
 	result := Result{ID: id, Status: status, Duration: duration}
 	if err != nil {
@@ -84,10 +96,8 @@ func (s *suite) record(id string, status Status, err error, duration time.Durati
 		if s.c != nil {
 			result.Detail = redactConnection(result.Detail, s.c.dsn)
 		}
-		for _, target := range s.all {
-			if dsn, e := target.resolveDSN(); e == nil {
-				result.Detail = redactConnection(result.Detail, dsn)
-			}
+		for _, dsn := range s.redactions {
+			result.Detail = redactConnection(result.Detail, dsn)
 		}
 	}
 	s.report.Results = append(s.report.Results, result)

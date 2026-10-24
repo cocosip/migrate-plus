@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -57,5 +59,58 @@ func TestCapturedWorkerOutputIsBounded(t *testing.T) {
 	p := bytes.Repeat([]byte("x"), 2*1024*1024)
 	if n, err := b.Write(p); err != nil || n != len(p) || b.Len() != 1024*1024 {
 		t.Fatalf("bounded write=%d/%d/%v", n, b.Len(), err)
+	}
+}
+
+func TestSamePathComparesExistingAndMissingPaths(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "targets.json")
+	report := filepath.Join(dir, "report.json")
+	for _, name := range []string{config, report} {
+		if err := os.WriteFile(name, []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !samePath(config, config) || samePath(config, report) {
+		t.Fatal("existing-file comparison broke")
+	}
+	// Missing paths compare lexically, case-insensitively only on Windows.
+	missing := filepath.Join(dir, "missing-report.json")
+	if samePath(config, missing) || samePath(report, missing) {
+		t.Fatal("existing path matched a missing path")
+	}
+	if got := samePath(missing, filepath.Join(dir, "Missing-Report.JSON")); got != (runtime.GOOS == "windows") {
+		t.Fatalf("missing-path case comparison=%v on %s", got, runtime.GOOS)
+	}
+}
+
+func TestSamePathRecognizesSymlinkAliases(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "targets.json")
+	report := filepath.Join(dir, "report.json")
+	for _, name := range []string{config, report} {
+		if err := os.WriteFile(name, []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(dir, "alias.json")
+	if err := os.Symlink(config, alias); err != nil {
+		t.Skipf("file symlinks unavailable: %v", err)
+	}
+	if !samePath(config, alias) || !samePath(alias, config) {
+		t.Fatal("symlink alias not recognized")
+	}
+	linkedDir := filepath.Join(dir, "linked")
+	if err := os.Symlink(dir, linkedDir); err != nil {
+		t.Skipf("directory symlinks unavailable: %v", err)
+	}
+	if !samePath(report, filepath.Join(linkedDir, "report.json")) {
+		t.Fatal("symlinked ancestor not resolved for existing path")
+	}
+	if samePath(config, filepath.Join(linkedDir, "new-report.json")) {
+		t.Fatal("distinct missing path matched")
+	}
+	if !samePath(filepath.Join(dir, "new-report.json"), filepath.Join(linkedDir, "new-report.json")) {
+		t.Fatal("missing report behind symlinked ancestor not resolved")
 	}
 }

@@ -36,6 +36,17 @@ func TestConfigurationSelectsTargetAndEnvironmentWithoutLeaking(t *testing.T) {
 	}
 }
 
+func TestConfigurationReportsUnderlyingJSONFailure(t *testing.T) {
+	if _, err := readConfig(strings.NewReader(`{"targets":`)); err == nil ||
+		!strings.Contains(err.Error(), "invalid or duplicate JSON fields") || !strings.Contains(err.Error(), "EOF") {
+		t.Fatalf("duplicate-check detail lost: %v", err)
+	}
+	if _, err := readConfig(strings.NewReader(`{"targets":[],"extra":1}`)); err == nil ||
+		!strings.Contains(err.Error(), "invalid configuration fields") || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("decode detail lost: %v", err)
+	}
+}
+
 func TestReportCannotPassIncompleteCoverage(t *testing.T) {
 	r := Report{Targets: []TargetReport{{Name: "a", Finished: true, Results: []Result{{ID: "ok", Status: Pass}, {ID: "needs-peer", Status: Skipped}}}}}
 	if r.ExitCode() != 1 {

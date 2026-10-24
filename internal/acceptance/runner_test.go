@@ -52,6 +52,18 @@ func TestDMNativeErrorClassification(t *testing.T) {
 	}
 }
 
+func TestRecordRedactsResolvedTargetDSNsCapturedOnce(t *testing.T) {
+	t.Setenv("MIGRATE_ACCEPTANCE_REDACT_PEER", "oracle://u:peer-pass@host/service")
+	s := &suite{ctx: context.Background(), all: []Target{{DSNEnv: "MIGRATE_ACCEPTANCE_REDACT_PEER"}}, report: TargetReport{Name: "test"}}
+	s.resolveRedactions()
+	// Removing the variable afterwards must not weaken redaction.
+	t.Setenv("MIGRATE_ACCEPTANCE_REDACT_PEER", "")
+	s.record("case", Fail, errors.New("connect failed for peer-pass"), 0)
+	if strings.Contains(s.report.Results[0].Detail, "peer-pass") {
+		t.Fatalf("peer DSN secret leaked: %s", s.report.Results[0].Detail)
+	}
+}
+
 func TestRedactionRemovesEncodedAndRawCredentials(t *testing.T) {
 	dsn := "oracle://u:p%40ss%2Bword@host/service?password=second%21"
 	clean := redactConnection("failed "+dsn+" p@ss+word second!", dsn)

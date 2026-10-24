@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -153,4 +155,30 @@ func hasPreflight(report TargetReport) bool {
 	return false
 }
 
-func samePath(a, b string) bool { return strings.EqualFold(a, b) }
+// samePath reports whether two absolute paths denote the same file, so the
+// report can never overwrite the configuration through an alias.
+func samePath(a, b string) bool {
+	aInfo, aErr := os.Stat(a)
+	bInfo, bErr := os.Stat(b)
+	if aErr == nil && bErr == nil {
+		return os.SameFile(aInfo, bInfo)
+	}
+	a, b = resolveSymlinkPath(a), resolveSymlinkPath(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// resolveSymlinkPath resolves symlinks in the longest existing ancestor, so a
+// not-yet-created report path still compares against the configuration path.
+func resolveSymlinkPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	dir, base := filepath.Dir(path), filepath.Base(path)
+	if dir == path {
+		return path
+	}
+	return filepath.Join(resolveSymlinkPath(dir), base)
+}

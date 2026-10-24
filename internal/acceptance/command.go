@@ -101,8 +101,17 @@ func listCases(cfg configuration, out io.Writer) int {
 	entries := List("", "")
 	if len(cfg.Targets) != 0 {
 		entries = nil
+		seen := map[string]bool{}
 		for _, target := range cfg.Targets {
-			entries = append(entries, List(target.Driver, target.Mode)...)
+			for _, entry := range List(target.Driver, target.Mode) {
+				// Several targets can share one profile; each profile's manifest is identical.
+				key := entry.Profile + "\x00" + entry.ID
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				entries = append(entries, entry)
+			}
 		}
 	}
 	if err := json.NewEncoder(out).Encode(entries); err != nil {

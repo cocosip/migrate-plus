@@ -104,3 +104,18 @@ func TestListHonorsSelection(t *testing.T) {
 		t.Fatalf("unknown list target exit=%d", code)
 	}
 }
+
+func TestListDeduplicatesSharedProfiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "targets.json")
+	data := `{"targets":[{"name":"one","driver":"dm","mode":"pg","schema":"MP_ONE","dsn_env":"ONE"},{"name":"two","driver":"dm","mode":"pg","schema":"MP_TWO","dsn_env":"TWO"}]}`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if code := Main(context.Background(), []string{testConfigFlag, path, testListFlag}, &out, "test"); code != 0 {
+		t.Fatalf("shared-profile list exit=%d %s", code, out.String())
+	}
+	if got := strings.Count(out.String(), `"id":"workflow.run"`); got != 1 {
+		t.Fatalf("workflow.run listed %d times for two targets sharing dm-pg", got)
+	}
+}
