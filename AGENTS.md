@@ -21,7 +21,15 @@ claiming the change is complete. Do not substitute package-only checks, cached
 test results, or disabled lint rules for these full repository checks.
 Report the actual results and any remaining failures or skipped verification.
 
-Database integration tests are separate from unit tests and require an
-explicitly selected disposable schema. Never run destructive integration tests
-against production GOIMAGE. A passing unit suite does not establish real-server
-compatibility; report integration results and untested modes separately.
+Database integration tests are behind the `integration` build tag, so plain
+`go build ./...` and `go test ./...` never compile or run them. Running them
+requires an explicitly selected disposable schema, for example:
+
+```powershell
+go test -tags integration ./database/dm/ -run Integration -count=1
+```
+
+with that package's `MIGRATE_PLUS_*_TEST_URL` environment variables set to
+one-time schemas. Never run destructive integration tests against production
+GOIMAGE. A passing unit suite does not establish real-server compatibility;
+report integration results and untested modes separately.

@@ -168,7 +168,9 @@ and execution failures. Opt-in integration tests reuse upstream
 `database/testing.Test`, independent sessions, DDL lock survival and upstream
 dirty/force/up/down behavior.
 
-Integration tests require `MIGRATE_PLUS_ORACLE_TEST_URL` and destroy supported
+Integration tests run only behind the `integration` build tag
+(`go test -tags integration`), require `MIGRATE_PLUS_ORACLE_TEST_URL`, and
+destroy supported
 objects in the selected disposable schema. See the
 [test instructions](../database/oracle/README.md#integration-tests). Record actual
 server versions, `COMPATIBLE` settings and results before claiming verification.

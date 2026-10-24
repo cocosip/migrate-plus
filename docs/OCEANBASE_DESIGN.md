@@ -168,7 +168,8 @@ catalog privileges, and arbitrary routine-body dependencies are not represented.
 Unit tests cover configuration, framing, preflight, locks, state, errors and Drop
 with sqlmock; they do not prove wire-level or real-server behavior.
 
-Integration tests are separate per mode and run only against an explicitly
+Integration tests are separate per mode, compile only behind the `integration`
+build tag (`go test -tags integration`), and run only against an explicitly
 disposable schema (never a production schema), with `MIGRATE_PLUS_OCEANBASE_MYSQL_TEST_URL`
 or `MIGRATE_PLUS_OCEANBASE_ORACLE_TEST_URL`. They cover upstream conformance,
 lock contention and survival, durable state, dirty/Force/Down, timeout discard,

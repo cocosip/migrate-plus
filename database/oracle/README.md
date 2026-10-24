@@ -177,8 +177,9 @@ partially failed drop.
 
 ## Integration tests
 
-`go test ./...` runs database-free unit tests and skips integration tests unless
-`MIGRATE_PLUS_ORACLE_TEST_URL` is set. SQL-boundary mocks do not prove server SQL
+`go test ./...` runs database-free unit tests; integration tests compile only
+behind the `integration` build tag and additionally require
+`MIGRATE_PLUS_ORACLE_TEST_URL` to be set. SQL-boundary mocks do not prove server SQL
 or wire-protocol compatibility.
 
 The integration suite calls upstream `database/testing.Test`, exercises
@@ -193,7 +194,7 @@ schema's supported objects. Use an empty, disposable, dedicated test schema.**
 ```powershell
 $env:CGO_ENABLED = '0'
 $env:MIGRATE_PLUS_ORACLE_TEST_URL = 'oracle://test_user:password@localhost:1521/service?x-statement-timeout=30000'
-go test ./database/oracle -run '^TestIntegration$' -count=1 -v
+go test -tags integration ./database/oracle -run '^TestIntegration$' -count=1 -v
 Remove-Item Env:MIGRATE_PLUS_ORACLE_TEST_URL
 ```
 

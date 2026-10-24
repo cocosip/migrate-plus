@@ -397,7 +397,9 @@ and native script forms, including COPY text inside quoted bodies. The native
 idle-status boundary requires a focused adapter check as well as SQL mocks;
 sqlmock alone cannot establish protocol or TxStatus behavior.
 
-Opt-in integration tests use `MIGRATE_PLUS_GAUSSDB_TEST_URL`, unset by default,
+Integration tests are opt-in twice: they compile only behind the `integration`
+build tag (`go test -tags integration`) and additionally use
+`MIGRATE_PLUS_GAUSSDB_TEST_URL`, unset by default,
 and an empty disposable schema. Reuse upstream `database/testing.Test`. The
 suite is destructive and also checks upstream up/down/steps/force/dirty
 behavior, two-pool exclusion through DDL/commit/rollback, timeouts, multi-statement

@@ -179,7 +179,7 @@ they need no database. Real-server tests are opt-in and destructive:
 
 ```powershell
 $env:MIGRATE_PLUS_GAUSSDB_TEST_URL = 'gaussdb://user:password@host:5432/testdb?search_path=disposable&sslmode=verify-full&x-statement-timeout=15000'
-go test ./database/gaussdb -run TestIntegration -count=1 -v
+go test -tags integration ./database/gaussdb -run TestIntegration -count=1 -v
 ```
 
 Use an empty disposable schema. The suite reuses upstream conformance tests and

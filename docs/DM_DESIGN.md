@@ -443,8 +443,10 @@ pool ownership, original-schema binding, timeout termination, malformed SQL and
 the literal values that must survive execution. Mock expectations alone do not
 prove a DM SQL operation is valid.
 
-Integration tests are enabled only with `MIGRATE_PLUS_DM_TEST_URL` against a
-disposable schema. Include upstream `database/testing.Test`, actual upstream
+Integration tests run only behind the `integration` build tag
+(`go test -tags integration ./database/dm/ -run Integration`) and additionally
+require `MIGRATE_PLUS_DM_TEST_URL` against a disposable schema. Include upstream
+`database/testing.Test`, actual upstream
 up/down/steps/force/dirty behavior, two-pool lock contention, DDL lock survival,
 DML durability, timeout/disconnect, stored units, and Drop dependencies.
 Destructive tests must never run against a shared application schema.

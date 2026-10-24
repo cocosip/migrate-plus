@@ -103,6 +103,9 @@ The migration account needs access to `V$VERSION`, `SYS.SYSOBJECTS`,
 `SF_GET_CASE_SENSITIVE_FLAG`.
 Grant the specific access needed on the deployed build, plus privileges and
 quota required by the scripts; the driver does not require a blanket DBA role.
+On the verified DM8 build `SYSDBA` cannot re-grant the `SYS` base tables
+directly (`-5567`); the working least-privilege set is the built-in `SOI`
+role (system base tables) plus the `VTI` role (`V$` views).
 
 `DBMS_LOCK.REQUEST` and `RELEASE` require execution privileges. If the package
 is absent, an administrator can install it using
@@ -196,7 +199,7 @@ supported objects in the selected schema**; use a disposable schema exclusively.
 
 ```powershell
 $env:MIGRATE_PLUS_DM_TEST_URL = 'dm://test_user:password@localhost:5236?schema=TEST_USER'
-go test -count=1 -v ./database/dm -run '^TestIntegration$'
+go test -tags integration -count=1 -v ./database/dm -run '^TestIntegration$'
 ```
 
 Tests cover existing BIT/integer version tables (logging actual dirty return

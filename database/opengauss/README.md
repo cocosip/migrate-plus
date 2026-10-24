@@ -192,7 +192,7 @@ opt-in and destructive:
 
 ```powershell
 $env:MIGRATE_PLUS_OPENGAUSS_TEST_URL = 'opengauss://user:password@host:5432/testdb?search_path=disposable&sslmode=disable&x-statement-timeout=15000'
-go test ./database/opengauss -run TestIntegration -count=1 -v
+go test -tags integration ./database/opengauss -run TestIntegration -count=1 -v
 ```
 
 Use an empty disposable schema. The suite reuses upstream conformance tests and

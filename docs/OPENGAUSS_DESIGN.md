@@ -237,7 +237,7 @@ Real-server verification is a separate acceptance item and has not run here.
 When an openGauss instance is available, set
 `MIGRATE_PLUS_OPENGAUSS_TEST_URL` (and optionally
 `MIGRATE_PLUS_OPENGAUSS_TEST_OTHER_URL`) to disposable schemas and run
-`go test ./database/opengauss -run TestIntegration -count=1 -v`. Record the
+`go test -tags integration ./database/opengauss -run TestIntegration -count=1 -v`. Record the
 exact server build, compatibility mode and topology. Priority evidence to
 collect: SHA256 and SM3 authentication against a real server, A and PG mode
 script execution including SAVEPOINT returning `25P01` on idle sessions and
