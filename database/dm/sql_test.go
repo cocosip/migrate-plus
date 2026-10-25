@@ -54,7 +54,7 @@ func TestFramingRejectsUnsupportedOrIncompleteInputBeforeExecution(t *testing.T)
 	for _, script := range []string{
 		`SELECT 'unterminated`, `SELECT "unterminated`, `SELECT 1; /* open`,
 		"BEGIN NULL;", "BEGIN NULL; END", "<<bad BEGIN NULL; END;", "/* nested /* comment */",
-		"DELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1; END$$", "SOURCE input.sql", "\\i input.sql", "@input.sql",
+		"DELIMITER $$\nCREATE PROCEDURE p() BEGIN SELECT 1; END$$", "SOURCE input.sql", "START run.sql", "HOST dir", "RUN script.sql", "\\i input.sql", "@input.sql",
 		"SET SERVEROUTPUT ON", "SET DEFINE OFF", "SET SCHEMA OTHER", "PROMPT hello", "SPOOL out.log", "EXIT", "QUIT",
 		"COPY items FROM STDIN;\n1\n\\.", "SELECT `a;b` FROM t", "SELECT q'[a;b]' FROM dual", "SELECT nq'{a;b}' FROM dual",
 		"SELECT $$a;b$$", "CREATE FUNCTION f() RETURNS VOID AS $body$ BEGIN NULL; END; $body$ LANGUAGE plpgsql;",

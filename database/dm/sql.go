@@ -69,7 +69,7 @@ func validateEnvelope(words []string, terminated, hasEnd bool) error {
 		return nil
 	}
 	switch words[0] {
-	case "DELIMITER", "SOURCE", "PROMPT", "SPOOL", "EXIT", "QUIT", "WHENEVER", "CONNECT", "ACCEPT", "DEFINE", "UNDEFINE", "VARIABLE", "PRINT", "COPY":
+	case "DELIMITER", "SOURCE", "START", "HOST", "RUN", "PROMPT", "SPOOL", "EXIT", "QUIT", "WHENEVER", "CONNECT", "ACCEPT", "DEFINE", "UNDEFINE", "VARIABLE", "PRINT", "COPY":
 		return fmt.Errorf("dm: unsupported client command or COPY framing")
 	case "SET":
 		if len(words) > 1 && words[1] != "TRANSACTION" && words[1] != "CONSTRAINTS" {
