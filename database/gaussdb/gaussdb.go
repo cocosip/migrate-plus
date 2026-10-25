@@ -425,7 +425,7 @@ func (g *GaussDB) ensureVersionTable() (err error) {
 EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k WHERE k.conrelid = c.oid AND k.contype = 'p'
 AND pg_catalog.array_length(k.conkey, 1) = 1 AND a.attnum = ANY(k.conkey))
 FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-WHERE c.relnamespace = $1 AND c.relname = $2 AND a.attname IN ('version', 'dirty') AND NOT a.attisdropped`
+WHERE c.relnamespace = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped`
 	if err := g.query(query, validateVersionColumns, g.schemaID, g.config.MigrationsTable); err != nil {
 		return err
 	}
@@ -441,6 +441,9 @@ func validateVersionColumns(rows *sql.Rows) error {
 		var notNull, primary bool
 		if err := rows.Scan(&name, &oid, &notNull, &primary); err != nil {
 			return err
+		}
+		if name != "version" && name != "dirty" {
+			return fmt.Errorf("gaussdb: unsupported additional migration state column %q", name)
 		}
 		valid := name == "version" && oid == 20 && primary || name == "dirty" && (oid == 20 || oid == 21 || oid == 23)
 		if seen[name] || !notNull || !valid {

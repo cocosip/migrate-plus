@@ -93,7 +93,7 @@ func expectVersionTable(mock sqlmock.Sqlmock, exists bool) {
 	if !exists {
 		mock.ExpectExec(`CREATE TABLE "APP"\."SCHEMA_MIGRATIONS" \("VERSION" BIGINT NOT NULL PRIMARY KEY, "DIRTY" SMALLINT NOT NULL CHECK \("DIRTY" IN \(0, 1\)\)\)`).WillReturnResult(sqlmock.NewResult(0, 0))
 	}
-	mock.ExpectQuery(`SELECT "VERSION", "DIRTY" FROM "APP"\."SCHEMA_MIGRATIONS" WHERE 1 = 0`).WillReturnRows(versionColumns())
+	mock.ExpectQuery(`SELECT \* FROM "APP"\."SCHEMA_MIGRATIONS" WHERE 1 = 0`).WillReturnRows(versionColumns())
 	mock.ExpectQuery(`SELECT "VERSION", "DIRTY" FROM "APP"\."SCHEMA_MIGRATIONS"$`).WillReturnRows(sqlmock.NewRows([]string{versionColumn, dirtyColumn}))
 }
 
@@ -208,7 +208,7 @@ func TestInitializationRejectsNonnumericVersionColumns(t *testing.T) {
 	expectMetadata(mock, 0, 1, 0)
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
-	mock.ExpectQuery(`SELECT "VERSION", "DIRTY".*WHERE 1 = 0`).WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
+	mock.ExpectQuery(`SELECT \*.*WHERE 1 = 0`).WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
 		sqlmock.NewColumn(versionColumn).OfType(varcharType, ""), sqlmock.NewColumn(dirtyColumn).OfType(smallintType, int64(0))))
 	expectUnlock(mock, 0)
 	mock.ExpectClose()
@@ -363,7 +363,7 @@ func TestCaseInsensitiveTableAliasesUseSameLockIdentity(t *testing.T) {
 		expectMetadata(mock, 4, 0, 0)
 		expectLock(mock, 0)
 		mock.ExpectQuery(`SELECT COUNT\(\*\).*UPPER\(NAME\) = \?`).WithArgs(101, historyTable).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
-		mock.ExpectQuery(`SELECT "VERSION", "DIRTY".*WHERE 1 = 0`).WillReturnRows(versionColumns())
+		mock.ExpectQuery(`SELECT \*.*WHERE 1 = 0`).WillReturnRows(versionColumns())
 		mock.ExpectQuery(`SELECT "VERSION", "DIRTY"`).WillReturnRows(sqlmock.NewRows([]string{versionColumn, dirtyColumn}))
 		expectUnlock(mock, 0)
 		d, err := WithInstance(db, &Config{MigrationsTable: table})

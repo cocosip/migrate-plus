@@ -17,6 +17,8 @@ import (
 
 const testSchema = "app"
 
+var relationColumns = []string{"relkind", "relpersistence"}
+
 func mockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
@@ -83,7 +85,7 @@ func stateColumns() *sqlmock.Rows {
 
 func expectVersionTable(mock sqlmock.Sqlmock, exists bool) {
 	expectLock(mock, true)
-	relation := sqlmock.NewRows([]string{"relkind", "relpersistence"})
+	relation := sqlmock.NewRows(relationColumns)
 	if exists {
 		relation.AddRow("r", "p")
 	}
@@ -162,11 +164,26 @@ func TestInitializationRejectsUnloggedVersionTable(t *testing.T) {
 	expectMetadata(mock, "A", 0)
 	expectLock(mock, true)
 	mock.ExpectQuery(`SELECT c.relkind, c.relpersistence FROM pg_catalog.pg_class`).WithArgs(int64(42), "schema_migrations").
-		WillReturnRows(sqlmock.NewRows([]string{"relkind", "relpersistence"}).AddRow("r", "u"))
+		WillReturnRows(sqlmock.NewRows(relationColumns).AddRow("r", "u"))
 	expectUnlock(mock, true)
 	mock.ExpectClose()
 	if _, err := withInstance(db, nil, idleStatus); err == nil || !strings.Contains(err.Error(), "permanent") {
 		t.Fatalf("accepted unlogged migration table: %v", err)
+	}
+}
+
+func TestInitializationRejectsAdditionalStateColumn(t *testing.T) {
+	db, mock := mockDB(t)
+	expectMetadata(mock, "A", 0)
+	expectLock(mock, true)
+	mock.ExpectQuery(`SELECT c.relkind, c.relpersistence FROM pg_catalog.pg_class`).WithArgs(int64(42), "schema_migrations").
+		WillReturnRows(sqlmock.NewRows(relationColumns).AddRow("r", "p"))
+	mock.ExpectQuery(`SELECT a.attname, a.atttypid::bigint`).WithArgs(int64(42), "schema_migrations").
+		WillReturnRows(stateColumns().AddRow("note", 25, true, false))
+	expectUnlock(mock, true)
+	mock.ExpectClose()
+	if _, err := withInstance(db, nil, idleStatus); err == nil || !strings.Contains(err.Error(), "additional migration state column") {
+		t.Fatalf("accepted additional migration state column: %v", err)
 	}
 }
 

@@ -19,7 +19,7 @@ func existingStateDriver(t *testing.T, columnType string, dirty any) (*Dm, sqlmo
 	expectMetadata(mock, 0, 1, 0)
 	expectLock(mock, 0)
 	mock.ExpectQuery(`SELECT COUNT.*BITAND\(INFO3, 255\) = 0.*BITAND\(INFO3, 131072\) = 0`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(1))
-	mock.ExpectQuery(`SELECT "VERSION", "DIRTY".*WHERE 1 = 0`).WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
+	mock.ExpectQuery(`SELECT \* FROM "APP"\."SCHEMA_MIGRATIONS" WHERE 1 = 0`).WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
 		sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0)),
 		sqlmock.NewColumn(dirtyColumn).OfType(columnType, dirty).WithPrecisionAndScale(19, 0)))
 	expectState(mock, 7, dirty)
@@ -152,6 +152,43 @@ func TestVersionColumnRequirements(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVersionColumnContractRejectsExtraAndMisnamedColumns(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		columns []*sqlmock.Column
+	}{
+		{"additional column", []*sqlmock.Column{
+			sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0)),
+			sqlmock.NewColumn(dirtyColumn).OfType(bitType, int64(0)),
+			sqlmock.NewColumn("NOTE").OfType(varcharType, ""),
+		}},
+		{"misnamed column", []*sqlmock.Column{
+			sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0)),
+			sqlmock.NewColumn("STATE").OfType(bitType, int64(0)),
+		}},
+		{"single column", []*sqlmock.Column{
+			sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0)),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, mock := initializedDriver(t)
+			mock.ExpectQuery("column probe").WillReturnRows(sqlmock.NewRowsWithColumnDefinition(tc.columns...))
+			if err := d.query("column probe", validateVersionColumns); err == nil {
+				t.Fatalf("accepted %s", tc.name)
+			}
+		})
+	}
+	t.Run("reversed column order", func(t *testing.T) {
+		d, mock := initializedDriver(t)
+		mock.ExpectQuery("column probe").WillReturnRows(sqlmock.NewRowsWithColumnDefinition(
+			sqlmock.NewColumn(dirtyColumn).OfType(bitType, int64(0)),
+			sqlmock.NewColumn(versionColumn).OfType(bigintType, int64(0))))
+		if err := d.query("column probe", validateVersionColumns); err != nil {
+			t.Fatalf("rejected a valid table with reversed column order: %v", err)
+		}
+	})
 }
 
 func TestExistingVersionTableUpAndSetVersion(t *testing.T) {

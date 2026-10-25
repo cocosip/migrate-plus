@@ -367,12 +367,17 @@ func (d *Dm) ensureVersionTable() (err error) {
 	} else if count != 1 {
 		return fmt.Errorf("dm: ambiguous migration table identity")
 	}
-	if err := d.query(`SELECT "VERSION", "DIRTY" FROM `+d.versionTable()+` WHERE 1 = 0`, validateVersionColumns); err != nil {
+	if err := d.query(`SELECT * FROM `+d.versionTable()+` WHERE 1 = 0`, validateVersionColumns); err != nil {
 		return err
 	}
 	_, _, err = d.Version()
 	return err
 }
+
+const (
+	versionColumnName = "VERSION"
+	dirtyColumnName   = "DIRTY"
+)
 
 func validateVersionColumns(rows *sql.Rows) error {
 	columns, err := rows.ColumnTypes()
@@ -380,18 +385,24 @@ func validateVersionColumns(rows *sql.Rows) error {
 		return err
 	}
 	if len(columns) != 2 {
-		return fmt.Errorf("dm: migration table must provide VERSION and DIRTY")
+		return fmt.Errorf("dm: migration table must provide exactly VERSION and DIRTY columns")
 	}
-	for i, column := range columns {
+	seen := map[string]bool{}
+	for _, column := range columns {
+		name := strings.ToUpper(column.Name())
+		if name != versionColumnName && name != dirtyColumnName || seen[name] {
+			return fmt.Errorf("dm: migration table must provide exactly VERSION and DIRTY columns")
+		}
+		seen[name] = true
 		precision, scale, sized := column.DecimalSize()
 		switch strings.ToUpper(column.DatabaseTypeName()) {
 		case "BIGINT":
 		case "SMALLINT", "INTEGER", "INT", "TINYINT", "BIT":
-			if i == 0 {
+			if name == versionColumnName {
 				return fmt.Errorf("dm: VERSION requires a 64-bit integer column")
 			}
 		case "NUMBER", "NUMERIC", "DECIMAL", "DEC":
-			if !sized || scale != 0 || (i == 0 && precision < 19) {
+			if !sized || scale != 0 || (name == versionColumnName && precision < 19) {
 				return fmt.Errorf("dm: migration state columns require sufficient integral precision")
 			}
 		default:

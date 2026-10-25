@@ -140,7 +140,9 @@ func (d *OceanBase) validateVersionColumns(ctx context.Context) error {
 			valid := false
 			switch name {
 			case "version":
-				valid = kind == "bigint" || ((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 19))
+				// MySQL BIGINT UNSIGNED reports numeric_precision 20 and cannot store NilVersion.
+				valid = (kind == "bigint" && (d.mode == ob.ModeOracle || precision.Valid && precision.Int64 == 19)) ||
+					((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 19))
 			case "dirty":
 				valid = kind == "bigint" || kind == "tinyint" || kind == "smallint" || kind == "int" || kind == "integer" || ((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 1))
 			}

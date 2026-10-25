@@ -110,6 +110,21 @@ func TestValidateExistingVersionColumnsRejectsNarrowVersion(t *testing.T) {
 	}
 }
 
+func TestValidateExistingVersionColumnsRejectsUnsignedMySQLVersion(t *testing.T) {
+	d, mock := mockDriver(t, ob.ModeMySQL)
+	mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().
+		AddRow("VERSION", "BIGINT", 20, 0, "NO").AddRow("DIRTY", "TINYINT", 3, 0, "NO"))
+	if err := d.validateVersionColumns(context.Background()); err == nil {
+		t.Fatal("accepted an unsigned BIGINT version column that cannot store NilVersion")
+	}
+	d, mock = mockDriver(t, ob.ModeMySQL)
+	mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().
+		AddRow("VERSION", "BIGINT", 19, 0, "NO").AddRow("DIRTY", "TINYINT", 3, 0, "NO"))
+	if err := d.validateVersionColumns(context.Background()); err != nil {
+		t.Fatalf("rejected a signed BIGINT version column: %v", err)
+	}
+}
+
 func TestOperationErrorPreservesServerDetails(t *testing.T) {
 	d, _ := mockDriver(t, ob.ModeMySQL)
 	cause := &ob.Error{Code: 1064, SQLState: "42000", Message: "invalid SQL"}

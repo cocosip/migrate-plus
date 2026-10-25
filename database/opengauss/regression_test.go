@@ -90,7 +90,7 @@ func TestInitializationRejectsNonPermanentState(t *testing.T) {
 			expectMetadata(mock, "A", 0)
 			expectLock(mock, true)
 			mock.ExpectQuery(`SELECT c.relkind`).WithArgs(int64(42), "schema_migrations").
-				WillReturnRows(sqlmock.NewRows([]string{"relkind", "relpersistence"}).AddRow("r", persistence))
+				WillReturnRows(sqlmock.NewRows(relationColumns).AddRow("r", persistence))
 			expectUnlock(mock, true)
 			mock.ExpectClose()
 			if _, err := WithInstance(db, nil); err == nil || !strings.Contains(err.Error(), "permanent") {
