@@ -6,7 +6,7 @@ run, so neither compatibility mode is certified.
 See the [design](../../docs/OCEANBASE_DESIGN.md) for decisions and evidence.
 
 The package implements upstream `database.Driver` using
-`github.com/cocosip/go-oceanbase v0.1.1`. Consumers keep using
+`github.com/cocosip/go-oceanbase v0.1.5`. Consumers keep using
 `github.com/golang-migrate/migrate/v4` and import this package to register
 `oceanbase`. Existing Oracle, DM, GaussDB and openGauss drivers are unchanged.
 

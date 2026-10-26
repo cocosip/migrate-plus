@@ -45,7 +45,7 @@ Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
 The distributed CLI includes Oracle, DM, GaussDB, openGauss, OceanBase and the upstream file source.
 
 OceanBase MySQL and Oracle tenants are supported by one driver using the native
-pure-Go client `github.com/cocosip/go-oceanbase v0.1.1`, with mode auto-detection.
+pure-Go client `github.com/cocosip/go-oceanbase v0.1.5`, with mode auto-detection.
 No OceanBase server build has been verified yet. See the
 [OceanBase driver guide](database/oceanbase/README.md) for connection strings,
 lock requirements, SQL restrictions and opt-in tests.

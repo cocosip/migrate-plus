@@ -52,7 +52,7 @@ THE SOFTWARE.
 ## OceanBase Go client dependency
 
 `database/oceanbase` imports
-[`github.com/cocosip/go-oceanbase v0.1.1`](https://github.com/cocosip/go-oceanbase/tree/v0.1.1).
+[`github.com/cocosip/go-oceanbase v0.1.5`](https://github.com/cocosip/go-oceanbase/tree/v0.1.5).
 Its module archive includes an MIT license, copyright 2026 go-oceanbase
 contributors. Client source is used as a Go module dependency rather than copied
 into this repository.
