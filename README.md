@@ -143,10 +143,10 @@ go build -trimpath -ldflags '-X main.Version=dev' -o bin/migrate-plus.exe ./cmd/
 .\bin\migrate-plus.exe -version
 ```
 
-GitHub Actions uses Go 1.27.x to test on Linux, Windows, and macOS, verify modules,
-run vet, compile integration tests without a database, collect coverage, and
-cross-build Linux/macOS/Windows CLI binaries for amd64/arm64. Build artifacts and
-each platform's coverage are retained for 14 days. Lint runs the same
+GitHub Actions uses Go 1.27.x to build and test natively on Linux, Windows, and
+macOS, verify modules, run vet, compile integration tests without a database,
+and collect coverage. Each platform's coverage is retained for 14 days.
+Lint runs the same
 golangci-lint v2.14.0 configuration on Linux, Windows, and macOS, matching the
 local installation and including integration test sources.
 All CI tests and builds disable cgo. CI runs on master/main/develop pushes, pull requests,
@@ -160,7 +160,9 @@ configured disposable schema and destroy its supported objects; see the
 Pushing a `v*` tag reuses the same CI workflow through the release checks job
 before publishing a GitHub Release, avoiding a duplicate tag-triggered CI run.
 Release notes list commits since the previous tag and link to the full comparison.
-Each release includes six `.tar.gz` CLI packages and SHA-256 checksums. Packages
+After those checks pass, one Ubuntu job cross-compiles and packages all six
+Linux/macOS/Windows amd64/arm64 targets once. Each release includes six `.tar.gz`
+CLI packages and SHA-256 checksums. Packages
 contain the CLI, this project's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `README.md`;
 the binary's `-version` reports the tag. Tags containing `-` create prereleases.
 

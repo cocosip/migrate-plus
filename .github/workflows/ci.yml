@@ -57,42 +57,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build:
-    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-    env:
-      GOOS: ${{ matrix.goos }}
-      GOARCH: ${{ matrix.goarch }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.27.x'
-          cache: true
-      - name: Build all packages
-        run: go build -trimpath ./...
-      - name: Build CLI
-        shell: bash
-        env:
-          BUILD_VERSION: ${{ github.sha }}
-        run: |
-          binary=migrate-plus
-          if [[ "$GOOS" == windows ]]; then binary+=.exe; fi
-          go build -trimpath -ldflags "-s -w -X main.Version=${BUILD_VERSION}" -o "dist/${binary}" ./cmd/migrate-plus
-      - name: Upload CLI
-        uses: actions/upload-artifact@v7
-        with:
-          name: migrate-plus-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 14
-
   lint:
     name: Lint (${{ matrix.os }}, Go ${{ matrix.go }})
     runs-on: ${{ matrix.os }}
