@@ -257,12 +257,16 @@ remains a separate acceptance item.
 M1 tests CLI help/build-version/create behavior and command failure without a
 database. There are no tests that only revalidate the upstream migration engine.
 
-GitHub Actions runs Go 1.27 tests on Linux/Windows/macOS, verifies module integrity
-and tidiness, collects coverage, builds CLI artifacts for Linux/macOS/Windows on
-amd64/arm64, and runs golangci-lint v2.14.0. All builds and normal tests disable
-cgo; a separate Linux race-detector run enables cgo. CodeQL scans Go on primary
-branch pushes, pull requests, and weekly. Dependabot checks modules and Actions
-weekly. Pushing a `v*` tag reuses CI before publishing six CLI archives with
+GitHub Actions runs Go 1.27.x tests on Linux/Windows/macOS, verifies module integrity,
+runs vet, compiles integration tests without a database, collects coverage for each
+platform, and builds CLI artifacts for Linux/macOS/Windows on amd64/arm64.
+Linux/Windows run golangci-lint v2.14.0, including integration sources; Linux also
+checks formatting, module tidiness and workflow syntax with actionlint. All builds
+and tests disable cgo.
+CI runs on master/main/develop pushes, pull requests and manual dispatch. CodeQL
+also scans `v*` tags and runs weekly. Dependabot checks modules and Actions weekly.
+Pushing a `v*` tag reuses CI once through the release checks job before publishing
+commit-based release notes and six CLI archives with
 embedded tag versions, project license, CLI notices, README, and SHA-256 checksums.
 Tags containing `-` are prereleases. No database
 services are provisioned by the default workflow. Oracle, DM, GaussDB, openGauss and OceanBase integration tests are

@@ -144,17 +144,23 @@ go build -trimpath -ldflags '-X main.Version=dev' -o bin/migrate-plus.exe ./cmd/
 ```
 
 GitHub Actions uses Go 1.27.x to test on Linux, Windows, and macOS, verify modules,
-check `go mod tidy -diff`, collect coverage, and cross-build Linux/macOS/Windows
-CLI binaries for amd64/arm64. Build artifacts and Linux coverage are retained for
-14 days. Lint uses golangci-lint v2.14.0, matching the local installation.
-Normal tests and builds disable cgo; the separate Linux race test enables cgo
-for Go's race detector. CodeQL analyzes Go on main-branch pushes, pull requests,
-and a weekly schedule. Dependabot checks Go modules and Actions weekly.
+run vet, compile integration tests without a database, collect coverage, and
+cross-build Linux/macOS/Windows CLI binaries for amd64/arm64. Build artifacts and
+each platform's coverage are retained for 14 days. Lint runs on Linux and Windows
+with golangci-lint v2.14.0, matching the local installation; its configuration also
+includes integration test sources. Linux additionally checks formatting,
+`go mod tidy -diff`, and workflow syntax with actionlint.
+All CI tests and builds disable cgo. CI runs on master/main/develop pushes, pull requests,
+and manual dispatch. CodeQL analyzes Go on those branch pushes, `v*` tags, pull
+requests, manual dispatch, and a weekly schedule. Dependabot checks Go modules
+and Actions weekly.
 Default tests require no database. Oracle, DM, GaussDB, openGauss and OceanBase integration tests require an explicitly
 configured disposable schema and destroy its supported objects; see the
 [driver guide](database/oracle/README.md#integration-tests).
 
-Pushing a `v*` tag runs the same CI checks before publishing a GitHub Release.
+Pushing a `v*` tag reuses the same CI workflow through the release checks job
+before publishing a GitHub Release, avoiding a duplicate tag-triggered CI run.
+Release notes list commits since the previous tag and link to the full comparison.
 Each release includes six `.tar.gz` CLI packages and SHA-256 checksums. Packages
 contain the CLI, this project's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `README.md`;
 the binary's `-version` reports the tag. Tags containing `-` create prereleases.

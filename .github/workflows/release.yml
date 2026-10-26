@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  GOTOOLCHAIN: local
   CGO_ENABLED: "0"
 
 jobs:
@@ -23,13 +24,16 @@ jobs:
     name: Publish CLI archives
     needs: checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.x"
+          go-version: '1.27.x'
           cache: true
       - name: Build release archives
         env:
@@ -51,6 +55,19 @@ jobs:
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
         run: test "$("dist/migrate-plus_${RELEASE_VERSION}_linux_amd64/migrate-plus" -version 2>&1)" = "$RELEASE_VERSION"
+      - name: Generate changelog
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          {
+            echo "## What's Changed"
+            echo
+            git log "${PREV_TAG}..HEAD" --pretty=tformat:"- %s" --no-merges
+            echo
+            echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${RELEASE_VERSION}"
+          } > CHANGELOG_BODY.md
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -58,5 +75,5 @@ jobs:
             dist/*.tar.gz
             dist/checksums.txt
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          body_path: CHANGELOG_BODY.md
           prerelease: ${{ contains(github.ref_name, '-') }}
