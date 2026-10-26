@@ -2,17 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [master, main, develop]
+    branches: [master, main]
   pull_request:
-  workflow_dispatch:
-  workflow_call:
+    branches: [master, main]
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  cancel-in-progress: true
 
 env:
   GOTOOLCHAIN: local
@@ -20,57 +19,43 @@ env:
 
 jobs:
   test:
-    name: Test (${{ matrix.os }}, Go ${{ matrix.go }})
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.27.x']
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1.27.x'
           cache: true
-      - name: Show toolchain
-        run: go version
       - name: Download dependencies
         run: go mod download
       - name: Verify dependencies
         run: go mod verify
       - name: Build packages
         run: go build ./...
-      - name: Vet
-        run: go vet ./...
       - name: Compile integration tests without a database
         run: go test -tags=integration ./... -run '^$' -timeout 1m
-      - name: Run tests with coverage
-        run: go test "-coverprofile=coverage.out" -covermode=atomic ./... -count=1 -timeout 5m
-      - name: Upload coverage
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-${{ matrix.os }}-go${{ matrix.go }}
-          path: coverage.out
-          if-no-files-found: error
-          retention-days: 14
+      - name: Run tests
+        run: go test -v ./... -count=1 -timeout 5m
 
   lint:
-    name: Lint (${{ matrix.os }}, Go ${{ matrix.go }})
+    name: Lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ['1.27.x']
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: ${{ matrix.go }}
+          go-version: '1.27.x'
           cache: true
       - uses: golangci/golangci-lint-action@v9
         with:

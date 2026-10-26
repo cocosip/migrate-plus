@@ -42,7 +42,7 @@ has been verified yet. See the [openGauss driver guide](database/opengauss/READM
 for connection strings, SQL restrictions and tests.
 
 Go 1.26 or newer is required; CI uses Go 1.27.x with `CGO_ENABLED=0`.
-The distributed CLI includes Oracle, DM, GaussDB, openGauss, OceanBase and the upstream file source.
+The CLI includes Oracle, DM, GaussDB, openGauss, OceanBase and the upstream file source.
 
 OceanBase MySQL and Oracle tenants are supported by one driver using the native
 pure-Go client `github.com/cocosip/go-oceanbase v0.1.5`, with mode auto-detection.
@@ -118,7 +118,7 @@ database/opengauss/    Native openGauss driver, unit and opt-in integration test
 database/oceanbase/    Native OceanBase driver (MySQL and Oracle tenants), unit and opt-in integration tests
 cmd/migrate-plus/      Thin executable entrypoint importing all five drivers
 docs/                  Architecture and design
-.github/workflows/     CI, CodeQL, and tag-based CLI releases
+.github/workflows/     CI, CodeQL, and tag-based releases
 LICENSE                Project MIT license
 THIRD_PARTY_NOTICES.md  Derived CLI attribution and license notice
 ```
@@ -144,27 +144,29 @@ go build -trimpath -ldflags '-X main.Version=dev' -o bin/migrate-plus.exe ./cmd/
 ```
 
 GitHub Actions uses Go 1.27.x to build and test natively on Linux, Windows, and
-macOS, verify modules, run vet, compile integration tests without a database,
-and collect coverage. Each platform's coverage is retained for 14 days.
+macOS, verify modules, and compile integration tests without a database.
 Lint runs the same
 golangci-lint v2.14.0 configuration on Linux, Windows, and macOS, matching the
 local installation and including integration test sources.
-All CI tests and builds disable cgo. CI runs on master/main/develop pushes, pull requests,
-and manual dispatch. CodeQL analyzes Go on those branch pushes, `v*` tags, pull
-requests, manual dispatch, and a weekly schedule. Dependabot checks Go modules
+All CI tests and builds disable cgo. CI runs on master/main pushes and pull
+requests targeting those branches. CodeQL analyzes Go on the same branch pushes
+and pull requests, plus a weekly schedule. Dependabot checks Go modules
 and Actions weekly.
 Default tests require no database. Oracle, DM, GaussDB, openGauss and OceanBase integration tests require an explicitly
 configured disposable schema and destroy its supported objects; see the
 [driver guide](database/oracle/README.md#integration-tests).
 
-Pushing a `v*` tag reuses the same CI workflow through the release checks job
-before publishing a GitHub Release, avoiding a duplicate tag-triggered CI run.
+Pushing a `v*` tag runs tests and a native build once on Ubuntu before publishing
+a GitHub Release.
 Release notes list commits since the previous tag and link to the full comparison.
-After those checks pass, one Ubuntu job cross-compiles and packages all six
-Linux/macOS/Windows amd64/arm64 targets once. Each release includes six `.tar.gz`
-CLI packages and SHA-256 checksums. Packages
-contain the CLI, this project's `LICENSE`, `THIRD_PARTY_NOTICES.md`, and `README.md`;
-the binary's `-version` reports the tag. Tags containing `-` create prereleases.
+Releases contain source code and release notes; no standalone CLI binaries are
+built or uploaded. Tags containing `-` create prereleases. Applications select a
+library version with `go get github.com/cocosip/migrate-plus@<version>`.
+Install the CLI from source with:
+
+```sh
+go install github.com/cocosip/migrate-plus/cmd/migrate-plus@latest
+```
 
 Design documentation: [project architecture](docs/DESIGN.md),
 [Oracle driver](docs/ORACLE_DESIGN.md), [DM driver](docs/DM_DESIGN.md),
