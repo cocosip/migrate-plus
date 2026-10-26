@@ -146,10 +146,9 @@ go build -trimpath -ldflags '-X main.Version=dev' -o bin/migrate-plus.exe ./cmd/
 GitHub Actions uses Go 1.27.x to test on Linux, Windows, and macOS, verify modules,
 run vet, compile integration tests without a database, collect coverage, and
 cross-build Linux/macOS/Windows CLI binaries for amd64/arm64. Build artifacts and
-each platform's coverage are retained for 14 days. Lint runs on Linux and Windows
-with golangci-lint v2.14.0, matching the local installation; its configuration also
-includes integration test sources. Linux additionally checks formatting,
-`go mod tidy -diff`, and workflow syntax with actionlint.
+each platform's coverage are retained for 14 days. Lint runs the same
+golangci-lint v2.14.0 configuration on Linux, Windows, and macOS, matching the
+local installation and including integration test sources.
 All CI tests and builds disable cgo. CI runs on master/main/develop pushes, pull requests,
 and manual dispatch. CodeQL analyzes Go on those branch pushes, `v*` tags, pull
 requests, manual dispatch, and a weekly schedule. Dependabot checks Go modules

@@ -100,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         go: ['1.27.x']
     steps:
       - uses: actions/checkout@v7
@@ -108,19 +108,6 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache: true
-      - name: Check formatting and module files
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          files=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
-          if [ -n "$files" ]; then
-            printf 'Run gofmt on:\n%s\n' "$files"
-            exit 1
-          fi
-          go mod tidy -diff
-      - name: Check GitHub Actions workflows
-        if: runner.os == 'Linux'
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0

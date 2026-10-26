@@ -50,7 +50,7 @@ jobs:
             cp LICENSE THIRD_PARTY_NOTICES.md README.md "$package/"
             tar -czf "dist/${archive}.tar.gz" -C "$package" .
           done
-          (cd dist && sha256sum *.tar.gz > checksums.txt)
+          (cd dist && sha256sum ./*.tar.gz > checksums.txt)
       - name: Verify CLI version
         env:
           RELEASE_VERSION: ${{ github.ref_name }}

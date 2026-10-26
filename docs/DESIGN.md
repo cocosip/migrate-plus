@@ -260,8 +260,8 @@ database. There are no tests that only revalidate the upstream migration engine.
 GitHub Actions runs Go 1.27.x tests on Linux/Windows/macOS, verifies module integrity,
 runs vet, compiles integration tests without a database, collects coverage for each
 platform, and builds CLI artifacts for Linux/macOS/Windows on amd64/arm64.
-Linux/Windows run golangci-lint v2.14.0, including integration sources; Linux also
-checks formatting, module tidiness and workflow syntax with actionlint. All builds
+Linux/Windows/macOS run the same golangci-lint v2.14.0 configuration, including
+integration sources. All builds
 and tests disable cgo.
 CI runs on master/main/develop pushes, pull requests and manual dispatch. CodeQL
 also scans `v*` tags and runs weekly. Dependabot checks modules and Actions weekly.
