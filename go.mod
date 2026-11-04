@@ -7,7 +7,7 @@ require (
 	gitee.com/chunanyong/dm v1.8.23
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/HuaweiCloudDeveloper/gaussdb-go v1.0.0-rc1
-	github.com/cocosip/go-oceanbase v0.2.0
+	github.com/cocosip/go-oceanbase v0.3.0
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/sijms/go-ora/v2 v2.9.0
 )
@@ -16,7 +16,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e // indirect
-	github.com/ebitengine/purego v0.11.2 // indirect
+	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
