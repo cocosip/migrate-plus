@@ -26,7 +26,7 @@ server/proxy combinations.
 
 ## 2. Dependency
 
-`github.com/cocosip/go-oceanbase v0.3.0`, pinned with no local `replace`. It is a
+`github.com/cocosip/go-oceanbase v0.3.1`, pinned with no local `replace`. It is a
 pure-Go client speaking the native protocol, with native server metadata,
 `sql.Out` bindings for Oracle PL/SQL and negotiated multi-statements. It
 contains no lock logic; `DBMS_LOCK` and `GET_LOCK` are server features called
