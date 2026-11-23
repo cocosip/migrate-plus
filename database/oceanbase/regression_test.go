@@ -17,7 +17,7 @@ func versionColumnRows() *sqlmock.Rows {
 }
 
 func TestSetVersionRollbackPreservesOriginalError(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeMySQL)
+	d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 	expectSession(mock, d.mode, "APP")
 	mock.ExpectBegin()
 	mock.ExpectExec(`DELETE FROM`).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -34,7 +34,7 @@ func TestSetVersionRollbackPreservesOriginalError(t *testing.T) {
 }
 
 func TestUnknownCommitDiscardsPhysicalSession(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeOracle)
+	d, mock := mockDriver(t, ob.CompatibilityModeOracle)
 	expectSession(mock, d.mode, "APP")
 	mock.ExpectBegin()
 	mock.ExpectExec(`DELETE FROM`).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -51,7 +51,7 @@ func TestUnknownCommitDiscardsPhysicalSession(t *testing.T) {
 }
 
 func TestNilVersionState(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeMySQL)
+	d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 	mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(sqlmock.NewRows([]string{versionColumn, dirtyColumn}))
 	if version, dirty, err := d.Version(); err != nil || version != database.NilVersion || dirty {
 		t.Fatalf("empty=%d %v %v", version, dirty, err)
@@ -77,7 +77,7 @@ func TestNilVersionState(t *testing.T) {
 }
 
 func TestValidateExistingVersionColumns(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		d, mock := mockDriver(t, mode)
 		mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().AddRow("VERSION", "NUMBER", 19, 0, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N"))
 		if err := d.validateVersionColumns(context.Background()); err != nil {
@@ -95,10 +95,10 @@ func TestValidateExistingVersionColumns(t *testing.T) {
 }
 
 func TestValidateExistingVersionColumnsRejectsNarrowVersion(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		d, mock := mockDriver(t, mode)
 		rows := versionColumnRows()
-		if mode == ob.ModeMySQL {
+		if mode == ob.CompatibilityModeMySQL {
 			rows.AddRow("VERSION", "TINYINT", 3, 0, "NO").AddRow("DIRTY", "TINYINT", 3, 0, "NO")
 		} else {
 			rows.AddRow("VERSION", "NUMBER", 10, 0, "N").AddRow("DIRTY", "NUMBER", 1, 0, "N")
@@ -111,13 +111,13 @@ func TestValidateExistingVersionColumnsRejectsNarrowVersion(t *testing.T) {
 }
 
 func TestValidateExistingVersionColumnsRejectsUnsignedMySQLVersion(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeMySQL)
+	d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 	mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().
 		AddRow("VERSION", "BIGINT", 20, 0, "NO").AddRow("DIRTY", "TINYINT", 3, 0, "NO"))
 	if err := d.validateVersionColumns(context.Background()); err == nil {
 		t.Fatal("accepted an unsigned BIGINT version column that cannot store NilVersion")
 	}
-	d, mock = mockDriver(t, ob.ModeMySQL)
+	d, mock = mockDriver(t, ob.CompatibilityModeMySQL)
 	mock.ExpectQuery(`SELECT column_name`).WillReturnRows(versionColumnRows().
 		AddRow("VERSION", "BIGINT", 19, 0, "NO").AddRow("DIRTY", "TINYINT", 3, 0, "NO"))
 	if err := d.validateVersionColumns(context.Background()); err != nil {
@@ -126,7 +126,7 @@ func TestValidateExistingVersionColumnsRejectsUnsignedMySQLVersion(t *testing.T)
 }
 
 func TestOperationErrorPreservesServerDetails(t *testing.T) {
-	d, _ := mockDriver(t, ob.ModeMySQL)
+	d, _ := mockDriver(t, ob.CompatibilityModeMySQL)
 	cause := &ob.Error{Code: 1064, SQLState: "42000", Message: "invalid SQL"}
 	var native *ob.Error
 	var operationErr *database.Error

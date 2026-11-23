@@ -39,7 +39,7 @@ func (v outputValue) Match(value driver.Value) bool {
 	return true
 }
 
-func mockDriver(t *testing.T, mode ob.Mode) (*OceanBase, sqlmock.Sqlmock) {
+func mockDriver(t *testing.T, mode ob.CompatibilityMode) (*OceanBase, sqlmock.Sqlmock) {
 	t.Helper()
 	db, mock, err := sqlmock.New(sqlmock.ValueConverterOption(valueConverter{}))
 	if err != nil {
@@ -68,28 +68,28 @@ func mockDriver(t *testing.T, mode ob.Mode) (*OceanBase, sqlmock.Sqlmock) {
 	return d, mock
 }
 
-func successCode(mode ob.Mode) int {
-	if mode == ob.ModeMySQL {
+func successCode(mode ob.CompatibilityMode) int {
+	if mode == ob.CompatibilityModeMySQL {
 		return 1
 	}
 	return 0
 }
-func expectLock(mock sqlmock.Sqlmock, mode ob.Mode, code int) {
-	if mode == ob.ModeMySQL {
+func expectLock(mock sqlmock.Sqlmock, mode ob.CompatibilityMode, code int) {
+	if mode == ob.CompatibilityModeMySQL {
 		mock.ExpectQuery(`SELECT GET_LOCK`).WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"lock"}).AddRow(code))
 		return
 	}
 	mock.ExpectExec(`BEGIN :1 := DBMS_LOCK.REQUEST`).WithArgs(outputValue(code), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
 }
-func expectUnlock(mock sqlmock.Sqlmock, mode ob.Mode, code int) {
-	if mode == ob.ModeMySQL {
+func expectUnlock(mock sqlmock.Sqlmock, mode ob.CompatibilityMode, code int) {
+	if mode == ob.CompatibilityModeMySQL {
 		mock.ExpectQuery(`SELECT RELEASE_LOCK`).WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"lock"}).AddRow(code))
 		return
 	}
 	mock.ExpectExec(`BEGIN :1 := DBMS_LOCK.RELEASE`).WithArgs(outputValue(code), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
 }
-func expectSession(mock sqlmock.Sqlmock, mode ob.Mode, schema string) {
-	if mode == ob.ModeMySQL {
+func expectSession(mock sqlmock.Sqlmock, mode ob.CompatibilityMode, schema string) {
+	if mode == ob.CompatibilityModeMySQL {
 		mock.ExpectQuery(`SELECT DATABASE`).WillReturnRows(sqlmock.NewRows([]string{"schema", "autocommit", "sql_mode", "lower_case_table_names"}).AddRow(schema, 1, "", 0))
 		return
 	}
@@ -97,7 +97,7 @@ func expectSession(mock sqlmock.Sqlmock, mode ob.Mode, schema string) {
 }
 
 func TestLocksAndVersionState(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			d, mock := mockDriver(t, mode)
 			expectLock(mock, mode, successCode(mode))
@@ -136,7 +136,7 @@ func TestVersionRejectsCorruptHistory(t *testing.T) {
 		sqlmock.NewRows([]string{versionColumn, dirtyColumn}).AddRow(1, 2),
 		sqlmock.NewRows([]string{versionColumn, dirtyColumn}).AddRow(1, 0).AddRow(2, 0),
 	} {
-		d, mock := mockDriver(t, ob.ModeMySQL)
+		d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 		mock.ExpectQuery(`SELECT version, dirty FROM`).WillReturnRows(rows)
 		if _, _, err := d.Version(); err == nil {
 			t.Fatal("accepted corrupt history")
@@ -145,7 +145,7 @@ func TestVersionRejectsCorruptHistory(t *testing.T) {
 }
 
 func TestRunPreflightsBeforeAnySQL(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeMySQL)
+	d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 	expectSession(mock, d.mode, "APP")
 	if err := d.Run(strings.NewReader("CREATE TABLE t(id INT); USE other;")); err == nil {
 		t.Fatal("accepted schema change")
@@ -160,7 +160,7 @@ func TestRunPreflightsBeforeAnySQL(t *testing.T) {
 }
 
 func TestLockTimeoutAndUnknownOutcome(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			d, mock := mockDriver(t, mode)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -177,14 +177,14 @@ func TestLockTimeoutAndUnknownOutcome(t *testing.T) {
 }
 
 func TestInitializationChecksLockBeforeCreatingHistory(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			db, mock, err := sqlmock.New(sqlmock.ValueConverterOption(valueConverter{}))
 			if err != nil {
 				t.Fatal(err)
 			}
 			modeName := "MYSQL"
-			if mode == ob.ModeOracle {
+			if mode == ob.CompatibilityModeOracle {
 				modeName = "ORACLE"
 			}
 			mock.ExpectQuery(`^$`).WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{versionColumn, "mode", "parameters", "types"}).AddRow("OceanBase 4.4.2.2", modeName, 1, 1))
@@ -194,14 +194,14 @@ func TestInitializationChecksLockBeforeCreatingHistory(t *testing.T) {
 			expectLock(mock, mode, successCode(mode))
 			for _, query := range []string{"COMMIT", "ROLLBACK"} {
 				mock.ExpectExec("^" + query + "$").WillReturnResult(sqlmock.NewResult(0, 0))
-				if mode == ob.ModeMySQL {
+				if mode == ob.CompatibilityModeMySQL {
 					mock.ExpectQuery(`SELECT IS_USED_LOCK`).WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"held"}).AddRow(1))
 				} else {
 					expectLock(mock, mode, 4)
 				}
 			}
 			query := `SELECT COUNT.*create_options`
-			if mode == ob.ModeOracle {
+			if mode == ob.CompatibilityModeOracle {
 				query = `SELECT COUNT.*TEMPORARY = 'N'`
 			}
 			mock.ExpectQuery(query).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
@@ -223,7 +223,7 @@ func TestInitializationChecksLockBeforeCreatingHistory(t *testing.T) {
 }
 
 func TestLockMustSurviveCommit(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			d, mock := mockDriver(t, mode)
 			expectLock(mock, mode, successCode(mode))
@@ -231,7 +231,7 @@ func TestLockMustSurviveCommit(t *testing.T) {
 				t.Fatal(err)
 			}
 			mock.ExpectExec(`^COMMIT$`).WillReturnResult(sqlmock.NewResult(0, 0))
-			if mode == ob.ModeMySQL {
+			if mode == ob.CompatibilityModeMySQL {
 				mock.ExpectQuery(`SELECT IS_USED_LOCK`).WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"held"}).AddRow(nil))
 			} else {
 				expectLock(mock, mode, 0)
@@ -245,7 +245,7 @@ func TestLockMustSurviveCommit(t *testing.T) {
 
 func TestRunBoundsEntireFile(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		d, mock := mockDriver(t, ob.ModeMySQL)
+		d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 		d.config.StatementTimeout = time.Second
 		expectSession(mock, d.mode, "APP")
 		mock.ExpectExec(regexp.QuoteMeta("SELECT 1;")).WillDelayFor(2 * time.Second).WillReturnResult(sqlmock.NewResult(0, 0))

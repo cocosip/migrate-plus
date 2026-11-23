@@ -48,7 +48,7 @@ func (d *OceanBase) SetVersion(version int, dirty bool) (err error) {
 			value = 1
 		}
 		binds := "?, ?"
-		if d.mode == ob.ModeOracle {
+		if d.mode == ob.CompatibilityModeOracle {
 			binds = ":1, :2"
 		}
 		query = `INSERT INTO ` + d.versionTable() + ` (version, dirty) VALUES (` + binds + `)`
@@ -95,7 +95,7 @@ func (d *OceanBase) ensureVersionTable() (err error) {
 		return err
 	}
 	query := `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ? AND table_type = 'BASE TABLE' AND (create_options IS NULL OR create_options NOT LIKE '%TEMPORARY%')`
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query = `SELECT COUNT(*) FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2 AND TEMPORARY = 'N' AND DURATION IS NULL`
 	}
 	var count int
@@ -111,7 +111,7 @@ func (d *OceanBase) ensureVersionTable() (err error) {
 	}
 	columns := `version BIGINT NOT NULL PRIMARY KEY, dirty TINYINT NOT NULL CHECK (dirty IN (0, 1))`
 	suffix := ` ENGINE=InnoDB`
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		columns = `version NUMBER(19) NOT NULL PRIMARY KEY, dirty NUMBER(1) NOT NULL CHECK (dirty IN (0, 1))`
 		suffix = ""
 	}
@@ -120,7 +120,7 @@ func (d *OceanBase) ensureVersionTable() (err error) {
 
 func (d *OceanBase) validateVersionColumns(ctx context.Context) error {
 	query := `SELECT column_name, data_type, numeric_precision, COALESCE(numeric_scale, 0), is_nullable FROM information_schema.columns WHERE table_schema = ? AND table_name = ?`
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query = `SELECT column_name, data_type, data_precision, NVL(data_scale, 0), nullable FROM ALL_TAB_COLUMNS WHERE owner = :1 AND table_name = :2`
 	}
 	seen := make(map[string]bool)
@@ -141,7 +141,7 @@ func (d *OceanBase) validateVersionColumns(ctx context.Context) error {
 			switch name {
 			case "version":
 				// MySQL BIGINT UNSIGNED reports numeric_precision 20 and cannot store NilVersion.
-				valid = (kind == "bigint" && (d.mode == ob.ModeOracle || precision.Valid && precision.Int64 == 19)) ||
+				valid = (kind == "bigint" && (d.mode == ob.CompatibilityModeOracle || precision.Valid && precision.Int64 == 19)) ||
 					((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 19))
 			case "dirty":
 				valid = kind == "bigint" || kind == "tinyint" || kind == "smallint" || kind == "int" || kind == "integer" || ((kind == "number" || kind == "decimal") && (!precision.Valid || precision.Int64 >= 1))

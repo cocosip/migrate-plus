@@ -43,10 +43,10 @@ func (d *OceanBase) lock(parent context.Context) error {
 				d.discard()
 				return err
 			}
-			if d.mode == ob.ModeMySQL && code == 1 || d.mode == ob.ModeOracle && code == 0 {
+			if d.mode == ob.CompatibilityModeMySQL && code == 1 || d.mode == ob.CompatibilityModeOracle && code == 0 {
 				return nil
 			}
-			if d.mode == ob.ModeMySQL && code != 0 || d.mode == ob.ModeOracle && code != 1 {
+			if d.mode == ob.CompatibilityModeMySQL && code != 0 || d.mode == ob.CompatibilityModeOracle && code != 1 {
 				d.discard()
 				return fmt.Errorf("oceanbase: unexpected lock result %d", code)
 			}
@@ -61,7 +61,7 @@ func (d *OceanBase) lock(parent context.Context) error {
 
 func (d *OceanBase) requestLock(ctx context.Context) (int, error) {
 	code := -1
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query := `BEGIN :1 := DBMS_LOCK.REQUEST(:2, 6, 0, FALSE); END;`
 		err := d.execContext(ctx, query, sql.Out{Dest: &code}, d.lockID)
 		return code, err
@@ -83,7 +83,7 @@ func (d *OceanBase) unlock() error {
 		defer cancel()
 		code := -1
 		var err error
-		if d.mode == ob.ModeOracle {
+		if d.mode == ob.CompatibilityModeOracle {
 			err = d.execContext(ctx, `BEGIN :1 := DBMS_LOCK.RELEASE(:2); END;`, sql.Out{Dest: &code}, d.lockID)
 		} else {
 			query := `SELECT RELEASE_LOCK(?)`
@@ -93,7 +93,7 @@ func (d *OceanBase) unlock() error {
 			return err
 		}
 		expected := 0
-		if d.mode == ob.ModeMySQL {
+		if d.mode == ob.CompatibilityModeMySQL {
 			expected = 1
 		}
 		if code != expected {
@@ -113,7 +113,7 @@ func (d *OceanBase) verifyLockSurvival() error {
 			return err
 		}
 		held := false
-		if d.mode == ob.ModeOracle {
+		if d.mode == ob.CompatibilityModeOracle {
 			code, err := d.requestLock(ctx)
 			if err != nil {
 				return err

@@ -26,7 +26,7 @@ func (d *OceanBase) Drop() error {
 	if err != nil {
 		return err
 	}
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		deps, err := d.dropDependencies(ctx)
 		if err != nil {
 			return err
@@ -42,7 +42,7 @@ func (d *OceanBase) Drop() error {
 	}
 	for _, key := range keys {
 		clause := " DROP FOREIGN KEY "
-		if d.mode == ob.ModeOracle {
+		if d.mode == ob.CompatibilityModeOracle {
 			clause = " DROP CONSTRAINT "
 		}
 		if err := d.execContext(ctx, "ALTER TABLE "+d.qualified(key.name)+clause+d.quoteIdentifier(key.kind)); err != nil {
@@ -51,7 +51,7 @@ func (d *OceanBase) Drop() error {
 	}
 	for _, object := range objects {
 		suffix := ""
-		if d.mode == ob.ModeOracle && object.kind == "TABLE" {
+		if d.mode == ob.CompatibilityModeOracle && object.kind == "TABLE" {
 			suffix = " PURGE"
 		}
 		if err := d.execContext(ctx, "DROP "+object.kind+" "+d.qualified(object.name)+suffix); err != nil {
@@ -67,7 +67,7 @@ SELECT 1 FROM information_schema.referential_constraints WHERE unique_constraint
 UNION ALL
 SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = ? AND view_schema <> ?
 ) dependencies`
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query = `SELECT COUNT(*) FROM (
 SELECT 1 FROM ALL_CONSTRAINTS child JOIN ALL_CONSTRAINTS parent
 ON parent.owner = child.r_owner AND parent.constraint_name = child.r_constraint_name
@@ -94,7 +94,7 @@ UNION ALL SELECT trigger_name, 'TRIGGER' FROM information_schema.triggers WHERE 
 UNION ALL SELECT event_name, 'EVENT' FROM information_schema.events WHERE event_schema = ?
 ORDER BY kind DESC, table_name`
 	args := []any{d.schema, d.schema, d.schema, d.schema}
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query = `SELECT object_name, object_type FROM ALL_OBJECTS WHERE owner = :1 AND subobject_name IS NULL
 AND generated = 'N' AND secondary = 'N' AND object_type NOT IN ('INDEX', 'LOB', 'PACKAGE BODY', 'TYPE BODY')
 AND object_name NOT LIKE 'BIN$%' ORDER BY DECODE(object_type, 'TRIGGER', 0, 'MATERIALIZED VIEW', 1, 'VIEW', 2, 'TABLE', 3, 'TYPE', 9, 5), object_name`
@@ -110,7 +110,7 @@ AND object_name NOT LIKE 'BIN$%' ORDER BY DECODE(object_type, 'TRIGGER', 0, 'MAT
 			switch object.kind {
 			case "TABLE", "VIEW", objectProcedure, objectFunction, objectTrigger:
 			case "SEQUENCE", "SYNONYM", "PACKAGE", "TYPE":
-				if d.mode != ob.ModeOracle {
+				if d.mode != ob.CompatibilityModeOracle {
 					return fmt.Errorf("oceanbase: unsupported MySQL Drop object %q", object.kind)
 				}
 			default:
@@ -125,7 +125,7 @@ AND object_name NOT LIKE 'BIN$%' ORDER BY DECODE(object_type, 'TRIGGER', 0, 'MAT
 
 func (d *OceanBase) foreignKeys(ctx context.Context) ([]dropObject, error) {
 	query := `SELECT table_name, constraint_name FROM information_schema.table_constraints WHERE constraint_schema = ? AND constraint_type = 'FOREIGN KEY'`
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query = `SELECT table_name, constraint_name FROM ALL_CONSTRAINTS WHERE owner = :1 AND constraint_type = 'R'`
 	}
 	var keys []dropObject

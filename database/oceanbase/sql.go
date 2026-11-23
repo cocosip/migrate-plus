@@ -18,13 +18,13 @@ const keywordRollback = "ROLLBACK"
 // splitStatements preserves MySQL batches; Oracle blocks use standalone slash lines.
 // The command denylist applies to top-level statements. Inside procedural bodies only
 // transaction control and system-level SET are rejected, so loops and EXIT remain valid.
-func splitStatements(script string, mode ob.Mode, sqlMode string) ([]string, error) {
+func splitStatements(script string, mode ob.CompatibilityMode, sqlMode string) ([]string, error) {
 	sp := &splitter{script: script, mode: mode, seg: newSegment()}
-	backslash := mode == ob.ModeMySQL && !hasSQLMode(sqlMode, "NO_BACKSLASH_ESCAPES")
+	backslash := mode == ob.CompatibilityModeMySQL && !hasSQLMode(sqlMode, "NO_BACKSLASH_ESCAPES")
 	ansiQuotes := hasSQLMode(sqlMode, "ANSI_QUOTES")
 	for i := 0; i < len(script); {
 		switch {
-		case mode == ob.ModeOracle && script[i] == '/' && slashLine(script, i):
+		case mode == ob.CompatibilityModeOracle && script[i] == '/' && slashLine(script, i):
 			if err := validateCommand(sp.words, mode); err != nil {
 				return nil, err
 			}
@@ -49,7 +49,7 @@ func splitStatements(script string, mode ob.Mode, sqlMode string) ([]string, err
 	if err := validateCommand(sp.words, mode); err != nil {
 		return nil, err
 	}
-	if mode == ob.ModeMySQL {
+	if mode == ob.CompatibilityModeMySQL {
 		if sp.sawSQL {
 			return []string{script}, nil
 		}
@@ -63,7 +63,7 @@ func splitStatements(script string, mode ob.Mode, sqlMode string) ([]string, err
 
 type splitter struct {
 	script                          string
-	mode                            ob.Mode
+	mode                            ob.CompatibilityMode
 	statements, words               []string
 	seg                             segment
 	start                           int
@@ -83,7 +83,7 @@ func (sp *splitter) appendStatement(end int) error {
 
 // semicolon ends a top-level statement or only a statement inside a procedural body.
 func (sp *splitter) semicolon(i int) error {
-	oracle := sp.mode == ob.ModeOracle
+	oracle := sp.mode == ob.CompatibilityModeOracle
 	inner := procedural(sp.words, sp.mode) && (oracle || sp.seg.depth > 0)
 	if oracle {
 		sp.blockTerminator = true
@@ -143,17 +143,17 @@ func newSegment() segment { return segment{} }
 
 func (s *segment) next() { s.set = false }
 
-func (s *segment) word(word, following string, proc bool, mode ob.Mode) error {
+func (s *segment) word(word, following string, proc bool, mode ob.CompatibilityMode) error {
 	if proc {
 		switch word {
 		case keywordCommit, keywordRollback, "SAVEPOINT":
 			return errTransactionControl
 		case "START", "XA":
-			if mode == ob.ModeMySQL {
+			if mode == ob.CompatibilityModeMySQL {
 				return errTransactionControl
 			}
 		case "SET":
-			if mode == ob.ModeMySQL {
+			if mode == ob.CompatibilityModeMySQL {
 				s.set = true
 			}
 		}
@@ -164,7 +164,7 @@ func (s *segment) word(word, following string, proc bool, mode ob.Mode) error {
 			return errSystemSet
 		}
 	}
-	if proc && mode == ob.ModeMySQL {
+	if proc && mode == ob.CompatibilityModeMySQL {
 		switch word {
 		case keywordBegin:
 			s.depth++
@@ -200,7 +200,7 @@ func nextWord(script string, i int) string {
 	return strings.ToUpper(script[i:end])
 }
 
-func validateCommand(words []string, mode ob.Mode) error {
+func validateCommand(words []string, mode ob.CompatibilityMode) error {
 	if len(words) == 0 {
 		return nil
 	}
@@ -212,11 +212,11 @@ func validateCommand(words []string, mode ob.Mode) error {
 			return fmt.Errorf("oceanbase: migration scripts cannot alter the session or system")
 		}
 	case "WITH":
-		if mode == ob.ModeOracle && len(words) > 1 && (words[1] == objectFunction || words[1] == objectProcedure) {
+		if mode == ob.CompatibilityModeOracle && len(words) > 1 && (words[1] == objectFunction || words[1] == objectProcedure) {
 			return fmt.Errorf("oceanbase: inline WITH routines are not supported")
 		}
 	case keywordBegin:
-		if mode == ob.ModeMySQL || len(words) > 1 && (words[1] == "TRANSACTION" || words[1] == "WORK") {
+		if mode == ob.CompatibilityModeMySQL || len(words) > 1 && (words[1] == "TRANSACTION" || words[1] == "WORK") {
 			return fmt.Errorf("oceanbase: transaction control is not supported in migration scripts")
 		}
 	}
@@ -232,11 +232,11 @@ func hasSQLMode(modes, mode string) bool {
 	return false
 }
 
-func procedural(words []string, mode ob.Mode) bool {
+func procedural(words []string, mode ob.CompatibilityMode) bool {
 	if len(words) == 0 {
 		return false
 	}
-	if mode == ob.ModeOracle {
+	if mode == ob.CompatibilityModeOracle {
 		if words[0] == keywordBegin || words[0] == "DECLARE" {
 			return true
 		}
@@ -247,7 +247,7 @@ func procedural(words []string, mode ob.Mode) bool {
 	if words[0] != "CREATE" {
 		return false
 	}
-	if mode == ob.ModeMySQL && len(words) > 1 && words[1] == "DEFINER" {
+	if mode == ob.CompatibilityModeMySQL && len(words) > 1 && words[1] == "DEFINER" {
 		for _, word := range words[2:] {
 			if word == objectFunction || word == objectProcedure || word == objectTrigger || word == "EVENT" {
 				return true
@@ -262,9 +262,9 @@ func procedural(words []string, mode ob.Mode) bool {
 		case objectFunction, objectProcedure, objectTrigger:
 			return true
 		case "PACKAGE", "TYPE":
-			return mode == ob.ModeOracle
+			return mode == ob.CompatibilityModeOracle
 		case "EVENT":
-			return mode == ob.ModeMySQL
+			return mode == ob.CompatibilityModeMySQL
 		default:
 			return false
 		}
@@ -281,11 +281,11 @@ func slashLine(script string, i int) bool {
 	return strings.TrimSpace(script[start:i+end]) == "/"
 }
 
-func sqlToken(script string, i int, mode ob.Mode, backslash, ansiQuotes bool) (end int, word string, meaningful bool, err error) {
+func sqlToken(script string, i int, mode ob.CompatibilityMode, backslash, ansiQuotes bool) (end int, word string, meaningful bool, err error) {
 	switch {
 	case strings.ContainsRune(" \t\r\n\v\f", rune(script[i])):
 		return i + 1, "", false, nil
-	case strings.HasPrefix(script[i:], "--") && (mode == ob.ModeOracle || i+2 == len(script) || script[i+2] <= ' '), mode == ob.ModeMySQL && script[i] == '#':
+	case strings.HasPrefix(script[i:], "--") && (mode == ob.CompatibilityModeOracle || i+2 == len(script) || script[i+2] <= ' '), mode == ob.CompatibilityModeMySQL && script[i] == '#':
 		end = strings.IndexByte(script[i:], '\n')
 		if end < 0 {
 			return len(script), "", false, nil
@@ -301,7 +301,7 @@ func sqlToken(script string, i int, mode ob.Mode, backslash, ansiQuotes bool) (e
 		}
 		return i + end + 4, "", false, nil
 	}
-	if mode == ob.ModeOracle {
+	if mode == ob.CompatibilityModeOracle {
 		if offset := alternativeQuoteOffset(script[i:]); offset > 0 {
 			end, err = alternativeQuoteEnd(script, i+offset)
 			return end, "", true, err
@@ -314,7 +314,7 @@ func sqlToken(script string, i int, mode ob.Mode, backslash, ansiQuotes bool) (e
 			return i + end + 4, "", true, nil
 		}
 	}
-	if script[i] == '\'' || script[i] == '"' || mode == ob.ModeMySQL && script[i] == '`' {
+	if script[i] == '\'' || script[i] == '"' || mode == ob.CompatibilityModeMySQL && script[i] == '`' {
 		end, err = quotedEnd(script, i, backslash && script[i] != '`' && (!ansiQuotes || script[i] != '"'))
 		return end, "", true, err
 	}

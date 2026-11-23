@@ -25,7 +25,7 @@ type OceanBase struct {
 	db                                       *sql.DB
 	conn                                     *sql.Conn
 	config                                   Config
-	mode                                     ob.Mode
+	mode                                     ob.CompatibilityMode
 	schema, serverVersion, sqlMode, lockName string
 	lockID                                   int64
 	isLocked, broken, closed                 atomic.Bool
@@ -90,9 +90,9 @@ func (d *OceanBase) initialize(ctx context.Context) error {
 	}
 	switch mode {
 	case "MYSQL":
-		d.mode = ob.ModeMySQL
+		d.mode = ob.CompatibilityModeMySQL
 	case "ORACLE":
-		d.mode = ob.ModeOracle
+		d.mode = ob.CompatibilityModeOracle
 		d.config.MigrationsTable = strings.ToUpper(d.config.MigrationsTable)
 	default:
 		return fmt.Errorf("oceanbase: unsupported server compatibility mode")
@@ -190,7 +190,7 @@ func (d *OceanBase) checkSession(ctx context.Context) error {
 	var sqlMode string
 	query := `SELECT DATABASE(), @@SESSION.autocommit, @@SESSION.sql_mode, @@lower_case_table_names`
 	var err error
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		query = `SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'), @@SESSION.autocommit FROM dual`
 		err = d.conn.QueryRowContext(ctx, query).Scan(&schema, &autocommit)
 	} else {
@@ -203,7 +203,7 @@ func (d *OceanBase) checkSession(ctx context.Context) error {
 		d.discard()
 		return fmt.Errorf("oceanbase: migrations require autocommit in the original nonempty schema")
 	}
-	if d.mode == ob.ModeMySQL {
+	if d.mode == ob.CompatibilityModeMySQL {
 		if lower < 0 || lower > 2 {
 			d.discard()
 			return fmt.Errorf("oceanbase: unknown identifier case behavior")
@@ -218,7 +218,7 @@ func (d *OceanBase) checkSession(ctx context.Context) error {
 
 func (d *OceanBase) quoteIdentifier(value string) string {
 	quote := `"`
-	if d.mode == ob.ModeMySQL {
+	if d.mode == ob.CompatibilityModeMySQL {
 		quote = "`"
 	}
 	return quote + strings.ReplaceAll(value, quote, quote+quote) + quote

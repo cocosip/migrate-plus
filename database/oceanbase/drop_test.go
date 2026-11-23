@@ -11,7 +11,7 @@ import (
 )
 
 func TestDropPreflightsBeforeDestruction(t *testing.T) {
-	for _, mode := range []ob.Mode{ob.ModeMySQL, ob.ModeOracle} {
+	for _, mode := range []ob.CompatibilityMode{ob.CompatibilityModeMySQL, ob.CompatibilityModeOracle} {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			d, mock := mockDriver(t, mode)
 			expectSession(mock, mode, "APP")
@@ -24,7 +24,7 @@ func TestDropPreflightsBeforeDestruction(t *testing.T) {
 }
 
 func TestDropCatalogFailureDoesNotExecuteDDL(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeMySQL)
+	d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 	expectSession(mock, d.mode, "APP")
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnError(errors.New("catalog permission denied"))
 	if err := d.Drop(); err == nil {
@@ -33,7 +33,7 @@ func TestDropCatalogFailureDoesNotExecuteDDL(t *testing.T) {
 }
 
 func TestDropQuotesAndOrdersObjects(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeMySQL)
+	d, mock := mockDriver(t, ob.CompatibilityModeMySQL)
 	expectSession(mock, d.mode, "APP")
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
 	mock.ExpectQuery(`SELECT`).WillReturnRows(sqlmock.NewRows([]string{objectNameColumn, objectKindColumn}).AddRow("v", "VIEW").AddRow("a`b", "TABLE").AddRow("p", "PROCEDURE"))
@@ -48,7 +48,7 @@ func TestDropQuotesAndOrdersObjects(t *testing.T) {
 }
 
 func TestDropRejectsUnsupportedObjectBeforeDDL(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeOracle)
+	d, mock := mockDriver(t, ob.CompatibilityModeOracle)
 	expectSession(mock, d.mode, "APP")
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
 	mock.ExpectQuery(`SELECT`).WillReturnRows(sqlmock.NewRows([]string{objectNameColumn, objectKindColumn}).AddRow("t", "TABLE").AddRow("x", "UNSUPPORTED"))
@@ -58,7 +58,7 @@ func TestDropRejectsUnsupportedObjectBeforeDDL(t *testing.T) {
 }
 
 func TestDropRefusesMaterializedViewsBeforeDDL(t *testing.T) {
-	d, mock := mockDriver(t, ob.ModeOracle)
+	d, mock := mockDriver(t, ob.CompatibilityModeOracle)
 	expectSession(mock, d.mode, "APP")
 	mock.ExpectQuery(`SELECT COUNT`).WillReturnRows(sqlmock.NewRows([]string{countColumn}).AddRow(0))
 	mock.ExpectQuery(`SELECT`).WillReturnRows(sqlmock.NewRows([]string{objectNameColumn, objectKindColumn}).AddRow("mv", "MATERIALIZED VIEW"))

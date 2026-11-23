@@ -6,7 +6,7 @@ run, so neither compatibility mode is certified.
 See the [design](../../docs/OCEANBASE_DESIGN.md) for decisions and evidence.
 
 The package implements upstream `database.Driver` using
-`github.com/cocosip/go-oceanbase v0.3.1`. Consumers keep using
+`github.com/cocosip/go-oceanbase v0.4.0`. Consumers keep using
 `github.com/golang-migrate/migrate/v4` and import this package to register
 `oceanbase`. Existing Oracle, DM, GaussDB and openGauss drivers are unchanged.
 
@@ -15,12 +15,14 @@ The package implements upstream `database.Driver` using
 Native URL examples (placeholders, not verified deployment examples):
 
 ```text
-oceanbase://app%40tenant:password@127.0.0.1:2881/demo?mode=mysql
-oceanbase://app%40tenant:password@127.0.0.1:2881/?mode=oracle
+oceanbase://app%40tenant:password@127.0.0.1:2881/demo?compatibilityMode=mysql
+oceanbase://app%40tenant:password@127.0.0.1:2881/?compatibilityMode=oracle
 ```
 
-`mode=auto` uses the native client's authenticated mode detection. Explicit
-mode mismatches are rejected by the native client. Credentials use URL encoding.
+`compatibilityMode=auto` uses the native client's authenticated mode detection.
+Explicit mode mismatches are rejected by the native client. The v0.4.0 native
+client renamed the former `mode` DSN option to `compatibilityMode`.
+Credentials use URL encoding.
 The URL opener removes these migration options before native DSN parsing:
 
 | Option | Meaning |

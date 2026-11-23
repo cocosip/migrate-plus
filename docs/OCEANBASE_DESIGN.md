@@ -17,8 +17,8 @@ One package and one `oceanbase://` scheme serve both MySQL and Oracle tenants,
 with mode auto-detection from native metadata. Separate public packages would
 duplicate connection ownership and configuration; wrapping the existing Oracle or
 upstream MySQL drivers would carry different client and database assumptions.
-A mismatch between an explicit mode in the URL and the server is rejected by the
-native client.
+A mismatch between an explicit compatibility mode in the URL and the server is
+rejected by the native client.
 
 Non-goals: SQL dialect translation, automatic reconnect or write replay, tenant
 or user creation, forced cascading deletion, and any claim beyond the tested
@@ -26,7 +26,7 @@ server/proxy combinations.
 
 ## 2. Dependency
 
-`github.com/cocosip/go-oceanbase v0.3.1`, pinned with no local `replace`. It is a
+`github.com/cocosip/go-oceanbase v0.4.0`, pinned with no local `replace`. It is a
 pure-Go client speaking the native protocol, with native server metadata,
 `sql.Out` bindings for Oracle PL/SQL and negotiated multi-statements. It
 contains no lock logic; `DBMS_LOCK` and `GET_LOCK` are server features called

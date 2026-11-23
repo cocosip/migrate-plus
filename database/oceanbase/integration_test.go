@@ -21,14 +21,14 @@ import (
 // These tests destroy supported objects in the explicitly selected disposable schemas.
 // Each compatibility mode has its own variable so one target never implies the other.
 func TestIntegrationMySQL(t *testing.T) {
-	runIntegration(t, "MIGRATE_PLUS_OCEANBASE_MYSQL_TEST_URL", ob.ModeMySQL)
+	runIntegration(t, "MIGRATE_PLUS_OCEANBASE_MYSQL_TEST_URL", ob.CompatibilityModeMySQL)
 }
 
 func TestIntegrationOracle(t *testing.T) {
-	runIntegration(t, "MIGRATE_PLUS_OCEANBASE_ORACLE_TEST_URL", ob.ModeOracle)
+	runIntegration(t, "MIGRATE_PLUS_OCEANBASE_ORACLE_TEST_URL", ob.CompatibilityModeOracle)
 }
 
-func runIntegration(t *testing.T, env string, mode ob.Mode) {
+func runIntegration(t *testing.T, env string, mode ob.CompatibilityMode) {
 	raw := os.Getenv(env)
 	if raw == "" {
 		t.Skipf("set %s to a disposable OceanBase schema; tests destroy its objects", env)
@@ -148,7 +148,7 @@ func integrationTimeout(t *testing.T, raw string) {
 		t.Fatal(err)
 	}
 	sleep := "SELECT SLEEP(5)"
-	if d.mode == ob.ModeOracle {
+	if d.mode == ob.CompatibilityModeOracle {
 		sleep = "BEGIN DBMS_LOCK.SLEEP(5); END;"
 	}
 	d.config.StatementTimeout = 200 * time.Millisecond
@@ -227,7 +227,7 @@ func assertLocked(t *testing.T, d *OceanBase) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	acquired := d.mode == ob.ModeMySQL && code == 1 || d.mode == ob.ModeOracle && code == 0
+	acquired := d.mode == ob.CompatibilityModeMySQL && code == 1 || d.mode == ob.CompatibilityModeOracle && code == 0
 	if acquired {
 		_ = d.unlock()
 		t.Fatal("another session acquired the migration lock")

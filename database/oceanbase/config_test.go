@@ -9,12 +9,12 @@ import (
 )
 
 func TestParseURL(t *testing.T) {
-	native, config, err := parseURL("oceanbase://app%40tenant:p%40ss@localhost:2881/demo?mode=mysql&x-migrations-table=history&x-statement-timeout=250")
+	native, config, err := parseURL("oceanbase://app%40tenant:p%40ss@localhost:2881/demo?compatibilityMode=mysql&x-migrations-table=history&x-statement-timeout=250")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if native.User != "app@tenant" || native.Password != "p@ss" || native.Mode != ob.ModeMySQL || !native.AllowMultiStatements || config.MigrationsTable != "history" || config.StatementTimeout != 250*time.Millisecond {
-		t.Fatalf("unexpected native/config: user=%s mode=%v config=%+v", native.User, native.Mode, config)
+	if native.User != "app@tenant" || native.Password != "p@ss" || native.CompatibilityMode != ob.CompatibilityModeMySQL || !native.AllowMultiStatements || config.MigrationsTable != "history" || config.StatementTimeout != 250*time.Millisecond {
+		t.Fatalf("unexpected native/config: user=%s mode=%v config=%+v", native.User, native.CompatibilityMode, config)
 	}
 }
 

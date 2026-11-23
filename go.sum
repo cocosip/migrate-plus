@@ -17,8 +17,8 @@ github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e/go.mod h1:cEWa1L
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
-github.com/cocosip/go-oceanbase v0.3.1 h1:9UjxrQR6qM0tCFOmdIVnMB0SmzLOr9JiITnx+LFX9TY=
-github.com/cocosip/go-oceanbase v0.3.1/go.mod h1:sQprubD8EKhTSb+hIKi3/gOQUQmFbvMMrJApe0qxiNM=
+github.com/cocosip/go-oceanbase v0.4.0 h1:qBmd2C/+IySikqVc1Zp67RkWu8kASfs//+yJl6QP5aA=
+github.com/cocosip/go-oceanbase v0.4.0/go.mod h1:sQprubD8EKhTSb+hIKi3/gOQUQmFbvMMrJApe0qxiNM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
